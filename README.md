@@ -15,24 +15,34 @@ Para ir ao ar na sua conta: copie `example.tfvars` para `terraform.tfvars`, pree
 
 ## Uso
 
-```bash
-cp example.tfvars terraform.tfvars
+O arquivo `terraform.tfvars` na raiz e carregado automaticamente. Nao use `-var-file=...` no PowerShell: o `-` e interpretado pelo shell e o Terraform responde `Too many command line arguments`.
+
+```powershell
+Copy-Item example.tfvars terraform.tfvars
 # edite nomes de buckets, workgroup e analytics_principal_arns (ARNs reais da SUA conta)
 
 terraform init
 terraform fmt
 terraform validate
-terraform plan -var-file=terraform.tfvars
-terraform apply -var-file=terraform.tfvars
+terraform plan
+terraform apply
 terraform output
+```
+
+Se precisar passar o arquivo explicitamente no PowerShell:
+
+```powershell
+terraform plan '-var-file=terraform.tfvars'
+# ou
+terraform plan --% -var-file=terraform.tfvars
 ```
 
 Outputs: `glue_role_arn`, `analytics_role_arn`, `access_role_arn` (sempre `null`).
 
 Destroy (nao apaga buckets do Projeto 2):
 
-```bash
-terraform destroy -var-file=terraform.tfvars
+```powershell
+terraform destroy
 ```
 
 ## Validacao US-5
