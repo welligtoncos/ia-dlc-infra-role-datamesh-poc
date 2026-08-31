@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   identity:
-    environment: dev
     uses: ./.github/workflows/deploy-identity.yml
     with:
       environment_name: dev
