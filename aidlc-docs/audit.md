@@ -837,6 +837,14 @@
 
 ---
 
+## AWS_ROLE_ARN vazio no caller
+**Timestamp**: 2026-08-31T04:28:00Z
+**User Input**: "Run set -euo pipefail ... env: AWS_ROLE_ARN: (vazio) Error: AWS_ROLE_ARN vazio."
+**AI Response**: "Caller nao tem environment: entao vars do Environment dev nao entram no input. Job deploy (com environment:dev) agora resolve vars.AWS_ROLE_ARN_DEV. Usuario deve criar a variavel no Environment dev ou no repositorio, nunca em Secrets."
+**Context**: Fix workflow + instrucao GitHub UI.
+
+---
+
 
 
 

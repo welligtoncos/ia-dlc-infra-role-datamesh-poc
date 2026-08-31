@@ -25,9 +25,10 @@ on:
         type: string
         required: true
       aws_role_arn:
-        description: Deploy role ARN (caller passes vars.AWS_ROLE_ARN_DEV/_HOM/_PROD)
+        description: Optional. Caller may pass vars.AWS_ROLE_ARN_*. Empty is OK; the job with environment: also reads vars.
         type: string
-        required: true
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -49,6 +50,7 @@ jobs:
         working-directory: identity
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,12 +64,10 @@ jobs:
           terraform_wrapper: false
 
       - name: Require AWS role ARN
-        env:
-          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
         run: |
           set -euo pipefail
           if [ -z "${AWS_ROLE_ARN}" ]; then
-            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
             exit 1
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
@@ -75,7 +75,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.aws_role_arn }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -132,6 +132,7 @@ jobs:
         working-directory: identity
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -145,12 +146,10 @@ jobs:
           terraform_wrapper: false
 
       - name: Require AWS role ARN
-        env:
-          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
         run: |
           set -euo pipefail
           if [ -z "${AWS_ROLE_ARN}" ]; then
-            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
             exit 1
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
@@ -158,7 +157,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.aws_role_arn }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -220,6 +219,7 @@ jobs:
       actions: read
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -233,12 +233,10 @@ jobs:
           terraform_wrapper: false
 
       - name: Require AWS role ARN
-        env:
-          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
         run: |
           set -euo pipefail
           if [ -z "${AWS_ROLE_ARN}" ]; then
-            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
             exit 1
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
@@ -246,7 +244,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.aws_role_arn }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
