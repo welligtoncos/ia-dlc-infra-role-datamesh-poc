@@ -1,23 +1,22 @@
-# Instrucoes de Testes de Contrato
+# Instruções de Testes de Contrato
 
-Contrato = outputs Terraform para o Projeto 2 (`shared-infrastructure.md`).
+Contrato com o **Projeto 2** (outputs da identidade) e contrato **U2 → U3** (backend).
 
-## Validar
+## Após apply da identidade
 
-Apos apply:
-
-```bash
+```powershell
+Set-Location identity
 terraform output glue_role_arn
 terraform output analytics_role_arn
 terraform output access_role_arn
 ```
 
-## Esperado
+Esperado: dois ARNs IAM; `access_role_arn` = `null`.
 
-| Output | Esperado |
-|--------|----------|
-| `glue_role_arn` | ARN `...:role/{prefix}-{env}-glue-role` |
-| `analytics_role_arn` | ARN `...:role/{prefix}-{env}-analytics-role` |
-| `access_role_arn` | vazio / `null` |
+Nomes: `{project_prefix}-{environment}-glue-role` / `-analytics-role`.
 
-Nomes de buckets/workgroup no `tfvars` devem ser os mesmos que o Projeto 2 criara. Esta unidade nao cria esses recursos; o contrato e so de **nomes + ARNs**.
+## Contrato backend
+
+`identity/env/{env}.backend.hcl`: `key` = `{prefix}/{env}/identity.tfstate`; `encrypt = true`. Bucket/tabela = outputs U2 (convenção ou override).
+
+Ver `aidlc-docs/construction/shared-infrastructure.md`.

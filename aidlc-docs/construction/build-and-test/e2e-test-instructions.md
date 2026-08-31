@@ -1,18 +1,21 @@
-# Instrucoes de Testes End-to-End
+# Instruções de Testes End-to-End
 
-Fluxo do engenheiro (P1). Sem UI.
+Fluxo de operador (não há UI).
 
-## Cenario feliz
+## Cenário: uma conta (ex. dev)
 
-1. Copiar `example.tfvars` → `terraform.tfvars` e preencher valores reais
-2. `terraform init && terraform validate && terraform plan -var-file=terraform.tfvars`
-3. `terraform apply -var-file=terraform.tfvars`
-4. Conferir os tres outputs (Acesso null)
-5. Rodar `tests/simulate-principal-policy.*`
-6. (Opcional) `sts assume-role` com P2 listado vs Nao-consumidor
-7. `terraform destroy -var-file=terraform.tfvars`
-8. Confirmar que as duas roles sumiram; buckets do Projeto 2 (se existirem) permanecem
+1. Aplicar `bootstrap/` (admin, state local).
+2. Copiar outputs para GitHub (`AWS_ROLE_ARN_DEV`, `AWS_REGION`) e conferir `identity/env/dev.backend.hcl`.
+3. Se state local da identidade existir: em `identity/`, `terraform init -backend-config=env/dev.backend.hcl -migrate-state`.
+4. Local: em `identity/`, `Copy-Item env\dev.tfvars terraform.tfvars` → `plan` / `apply`; **ou** push na branch `dev` (pipeline).
+5. Em `identity/`: `..\tests\simulate-principal-policy.ps1 -SorBucket "<sor>"` (local) ou o `.sh` no CI.
+6. Conferir `terraform output` (contrato Projeto 2).
+7. Destroy da identidade: **local**, não no CI. Não destruir bootstrap com state remoto ainda em uso.
 
-## Nao executado automaticamente
+## Hom / prod
 
-Apply/destroy exigem conta AWS e `tfvars` reais. Este ambiente so validou `init` + `validate`.
+Publicar `origin/hom` antes do primeiro push hom. Aprovar o GitHub Environment no job `apply` depois de ler o plan.
+
+## Isolamento
+
+Não disparar os três workflows no mesmo evento. Concurrency `identity-{env}` sem cancelar run em andamento.

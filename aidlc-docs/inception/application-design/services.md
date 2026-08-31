@@ -1,42 +1,50 @@
-# Services — InfraRoles Mini
+# Services — Incremento multi-env
 
-## IdentityPlatform
+Dois serviços (Q3-A). Nenhum `apply` único cobre os dois. IdentityPlatform da POC v1 permanece o rótulo do **segundo** apply (identidade).
+
+---
+
+## BootstrapService
 
 | Campo | Valor |
 |-------|--------|
-| Tipo | Serviço lógico (Q3-A) |
-| Implantação | Um único `terraform apply` no root module |
-| Camada extra? | Não (Q7-A). É o **rótulo** do apply coeso, não uma fachada na frente dos componentes |
+| Tipo | Serviço one-shot |
+| Implantação | `BootstrapStack.apply_once` na workstation, **por conta** |
+| Orquestração | Só este root; state local |
 
 ### Responsabilidades
 
-- Orquestrar em um apply: suporte bootstrap + `GlueIdentity` + `AnalyticsIdentity` + `OutputContract`
-- Expor o ciclo `plan` / `apply` / `output` / `destroy`
-- Carregar variáveis compartilhadas (naming, região, buckets, principais de Analytics) e injetá-las nas identidades — **sem** criar dependência IAM entre as roles
-- Não criar buckets, jobs Glue, grants Lake Formation nem a role de Acesso
+- Materializar state backend + OIDC + deploy role **antes** de qualquer pipeline
+- Não aplicar Glue/Analytics
+- Não rodar no GitHub Actions
 
-### Orquestração
+### Quem opera
 
-```
-IdentityPlatform.apply
-    |
-    +-- bootstrap (suporte): provider, versions, vars, tags, backend local
-    +-- GlueIdentity.configure(...)     --> glue_role_arn
-    +-- AnalyticsIdentity.configure(...) --> analytics_role_arn
-    +-- OutputContract.bind(glue, analytics) --> outputs (+ access_role_arn = null)
-```
+Engenheiro com admin na conta alvo (três vezes: dev, hom, prod).
 
-As duas identidades rodam no mesmo apply, em paralelo lógico: nenhuma espera o ARN da outra (Q4-A). O contrato só **lê** os ARNs depois que as identidades existem no mesmo grafo.
+---
 
-### Interações externas
+## DeployService
 
-| Quem | Como |
-|------|------|
-| P1 Engenheiro | Opera o serviço (`apply` / `output` / `destroy`) |
-| Projeto 2 | Lê só o `OutputContract` |
-| Glue Job, P2, Não-consumidor | Não chamam o serviço; assumem roles já provisionadas (aceite / US-5 em Build and Test) |
+| Campo | Valor |
+|-------|--------|
+| Tipo | Serviço contínuo |
+| Implantação | `CiPipelines.run(env)` (GitHub Actions) **ou** apply local do IdentityPlatform com EnvConfig |
+| Orquestração | CI assume a deploy role (OIDC), `init` com backend.hcl, plan/apply do identity root, chama simulate.sh |
+
+### Responsabilidades
+
+- Aplicar só o root de identidade na conta do `env`
+- Isolar os três ambientes (um workflow não assume a role dos outros)
+- Hom/prod: esperar aprovação do GitHub Environment
+
+### Quem opera
+
+- Push/`workflow_dispatch` + aprovador em hom/prod
+- Engenheiro local: mesmo IdentityPlatform, sem `CiPipelines.run`
 
 ### Serviços que não existem
 
-- Serviço Glue vs serviço Analytics separados (rejeitado Q3-C)
-- Serviço de verificação (rejeitado Q6-B)
+- `MultiEnvIdentity` único (Q3-B)
+- Um serviço por ambiente (Q3-C) — é o mesmo DeployService com `env` diferente
+- Serviço de verificação — Build and Test

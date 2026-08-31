@@ -1,34 +1,39 @@
-# Execucao de Testes Unitarios
+# Execução de Testes Unitários
 
-Nao ha testes de linguagem de aplicacao. O equivalente e **validacao estatica do Terraform**.
+Não há testes de linguagem de aplicação. Equivalente: **validação estática** dos dois roots e `fmt -check` (o mesmo que o CI).
 
-## Executar Testes Unitarios
+## Executar Testes Unitários
 
-### 1. Executar Todos os Testes Unitarios
+### 1. Executar Todos os Testes Unitários
 
-Na raiz do workspace:
+```powershell
+# Identidade
+Set-Location identity
+terraform init -backend=false
+terraform fmt -check
+terraform validate
 
-```bash
-terraform fmt -check -recursive
+# Bootstrap
+Set-Location ..\bootstrap
+terraform init
+terraform fmt -check
 terraform validate
 ```
 
-Validacoes embutidas (falham no `plan`/`validate` conforme o caso):
+Validações embutidas (identidade):
 
-- `analytics_principal_arns` nao vazia
-- cada ARN no formato `arn:aws:iam::ACCOUNT:(user|role)/...`
-- `check` `analytics_principals_same_account` (no **plan**, com credencial)
+- `environment` ∈ {dev, hom, prod}
+- `analytics_principal_arns` não vazia; formato ARN IAM
+- `check` same-account no **plan** (precisa credencial)
 
 ### 2. Revisar Resultados dos Testes
 
-- **Esperado**: validate sucesso; fmt sem diff
+- **Esperado**: validate sucesso; fmt sem diff nos dois roots
 - **Cobertura**: N/A (IaC)
-- **Relatorio**: saida do CLI
-
-Ja executado nesta sessao: `terraform validate` → sucesso (apos `init`).
+- **Relatório**: CLI
 
 ### 3. Corrigir Testes com Falha
 
 1. Ler a mensagem do Terraform
-2. Ajustar `.tf` ou `terraform.tfvars`
+2. Ajustar `.tf` ou tfvars
 3. Reexecutar `fmt` / `validate`

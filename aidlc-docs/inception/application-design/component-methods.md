@@ -1,62 +1,59 @@
-# Component Methods — InfraRoles Mini
+# Component Methods — Incremento multi-env
 
-Assinaturas de **interface** (Q2-C). Regras de policy detalhadas ficam no Design Funcional.
-
-Dois níveis:
-1. Operações do root / serviço `IdentityPlatform`
-2. Entradas e saídas de cada componente
+Assinaturas de **interface** (Q2-C). Sem YAML steps nem `aws_*` detalhados.
 
 ---
 
-## IdentityPlatform (operações do root)
-
-Não é componente (Q7-A). Operações do ciclo de vida Terraform:
+## BootstrapStack
 
 | Operação | Entrada | Saída | Propósito |
 |----------|---------|-------|-----------|
-| `plan` | Variáveis da POC | Plano de mudança | Preview sem aplicar |
-| `apply` | Variáveis da POC (lista `analytics_principal_arns` não vazia) | Estado local + recursos | Provisionar as duas identidades e o contrato |
-| `output` | Estado aplicado | Três ARNs (Acesso = null) | Consumo pelo engenheiro / Projeto 2 |
-| `destroy` | Estado aplicado | Conta sem recursos deste projeto | US-6; não destrói buckets do Projeto 2 |
-
-Variáveis da POC (suporte, US-4): `project_prefix`, `environment`, `aws_region`, `sor_bucket`, `sot_bucket`, `spec_bucket`, `athena_results_bucket`, `analytics_principal_arns`.
+| `apply_once` | Credencial admin na conta alvo; vars de naming/repo GitHub | State local + backend + OIDC + deploy role | Uma vez por conta; **não** no CI |
+| `destroy_local` | State local do bootstrap | Remove backend/OIDC/role desta pasta | Manual; arriscado se o identity já usa o S3 |
 
 ---
 
-## GlueIdentity
+## IdentityPlatform (root de identidade — POC v1 + backend)
 
-| Interface | Tipo | Descrição |
-|-----------|------|-----------|
-| `configure(prefix, environment, sor_bucket, sot_bucket, spec_bucket)` | entrada | Naming e perímetro S3 das camadas |
-| `role_arn` | saída | ARN da execution role |
+| Operação | Entrada | Saída | Propósito |
+|----------|---------|-------|-----------|
+| `plan` | EnvConfig (tfvars + backend.hcl) | Plano | Preview |
+| `apply` | Idem; lista `analytics_principal_arns` não vazia | State **remoto** na conta + roles | Provisionar Glue + Analytics + contrato |
+| `output` | State aplicado | Três ARNs (Acesso = null) | Projeto 2 / engenheiro |
+| `destroy` | State remoto | Remove só recursos deste root | Manual/local; **não** é método de CiPipelines |
 
-Sem operação `assume` neste componente: quem assume é o Glue Job (ator de aceite).
+**Local (Windows):** copiar `env/{env}.tfvars` → `terraform.tfvars`; `init -backend-config=env/{env}.backend.hcl`. Sem `-var-file=` no PowerShell.
 
----
+**CI:** `-var-file=env/{env}.tfvars` e `-backend-config=env/{env}.backend.hcl`.
 
-## AnalyticsIdentity
-
-| Interface | Tipo | Descrição |
-|-----------|------|-----------|
-| `configure(prefix, environment, sor_bucket, sot_bucket, spec_bucket, athena_results_bucket, analytics_principal_arns)` | entrada | Naming, perímetro de leitura, resultados Athena, trust |
-| `role_arn` | saída | ARN da role de Analytics |
-
-Sem operação `assume` neste componente: P2 e Não-consumidor são atores de aceite.
+GlueIdentity / AnalyticsIdentity / OutputContract: mesmas interfaces `configure` / `role_arn` / `bind` da POC v1.
 
 ---
 
-## OutputContract
+## EnvConfig
 
 | Interface | Tipo | Descrição |
 |-----------|------|-----------|
-| `bind(glue_role_arn, analytics_role_arn)` | entrada | ARNs produzidos pelas identidades |
-| `glue_role_arn` | saída | Pass-through |
-| `analytics_role_arn` | saída | Pass-through |
-| `access_role_arn` | saída | Sempre `null` nesta POC |
+| `tfvars(env)` | arquivo | `environment`, buckets, workgroup, `analytics_principal_arns`, placeholders de account |
+| `backend_hcl(env)` | arquivo | bucket, dynamodb_table, key, region (placeholders) |
+
+Não tem `apply`. Só é lido.
+
+---
+
+## CiPipelines
+
+| Operação | Entrada | Saída | Propósito |
+|----------|---------|-------|-----------|
+| `run(env)` | Branch/dispatch; GitHub Environment `env`; vars (account id, role OIDC ARN); EnvConfig | Plan + apply (dev auto; hom/prod após aprovação) + log do simulate.sh | Deploy isolado |
+
+**Não** expõe `destroy`.
+
+Invoca `tests/simulate-principal-policy.sh` após apply; não é dono da verificação (Q6-A).
 
 ---
 
 ## Fora deste documento
 
-- Matriz allow/deny por ação IAM → Design Funcional
-- `simulate-principal-policy` → Build and Test (Q6-A)
+- Trust OIDC (`sub`, environment) → Infrastructure Design / NFR Design
+- Matriz IAM Glue/Analytics → Functional Design (POC v1; estágio SKIP neste incremento)

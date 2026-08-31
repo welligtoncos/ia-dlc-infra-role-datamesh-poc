@@ -1,33 +1,41 @@
-# Unit of Work Story Map — InfraRoles Mini
+# Unit of Work Story Map — Incremento multi-env
 
-Todas as histórias atribuídas. Nenhuma história órfã.
+Histórias de usuário deste incremento: **N/A** (estágio pulado). Mapa = US da U1 + RF-ME nas U2/U3. Nenhuma RF-ME órfã.
 
-## Mapa unidade → histórias
+## Mapa unidade → histórias / RFs
 
-| Unidade | Histórias | Notas |
-|---------|-----------|--------|
-| `u1-identity-iam` | US-1, US-2, US-3, US-4, US-5, US-6 | Loop único de Construction |
+| Unidade | Histórias / RFs | Notas |
+|---------|-----------------|--------|
+| `u1-identity-iam` | US-1 a US-6 | Entregue; não reabrir |
+| `u2-bootstrap` | RF-ME3 | Habilita RF-ME2 e RF-ME4 |
+| `u3-identity-ci` | RF-ME1, RF-ME2, RF-ME4, RF-ME5, RF-ME6, RF-ME7 | Também RF-ME3 como premissa operacional |
 
-## Mapa história → unidade / módulo lógico
+## Mapa história / RF → unidade
 
-| História | Unidade | Módulo lógico / operação | Persona-dona |
-|----------|---------|--------------------------|--------------|
-| US-1 Execution role Glue | `u1-identity-iam` | GlueIdentity | P1 |
-| US-2 Role Analytics | `u1-identity-iam` | AnalyticsIdentity | P2 |
-| US-3 Contrato de outputs | `u1-identity-iam` | OutputContract | P1 |
-| US-4 Parametrização | `u1-identity-iam` | Bootstrap / variáveis do root | P1 |
-| US-5 Menor privilégio | `u1-identity-iam` | Build and Test da unidade (não é componente) | P1 |
-| US-6 Destroy limpo | `u1-identity-iam` | `IdentityPlatform.destroy` | P1 |
+| ID | Unidade | Módulo / operação | Dono |
+|----|---------|-------------------|------|
+| US-1 | u1 | GlueIdentity | P1 |
+| US-2 | u1 | AnalyticsIdentity | P2 |
+| US-3 | u1 | OutputContract | P1 |
+| US-4 | u1 | variáveis do root | P1 |
+| US-5 | u1 (script) + u3 (CI invoca .sh) | Build and Test | P1 |
+| US-6 | u1 destroy; u3 destroy **não** no CI | IdentityPlatform.destroy local | P1 |
+| RF-ME1 | u3 | validation environment | P1 |
+| RF-ME2 | u3 (backend.hcl) + u2 (cria bucket/tabela) | EnvConfig + BootstrapStack | P1 |
+| RF-ME3 | u2 | BootstrapStack.apply_once | P1 |
+| RF-ME4 | u3 | CiPipelines + branch hom | P1 |
+| RF-ME5 | u3 | run(env) + var-file CI vs local | P1 |
+| RF-ME6 | u3 | EnvConfig tfvars | P1 |
+| RF-ME7 | u3 | isolamento OIDC/environments | P1 |
 
-## Cobertura
+## Cobertura RF-ME
 
-| ID | Atribuída | Unidade |
-|----|-----------|---------|
-| US-1 | sim | u1-identity-iam |
-| US-2 | sim | u1-identity-iam |
-| US-3 | sim | u1-identity-iam |
-| US-4 | sim | u1-identity-iam |
-| US-5 | sim | u1-identity-iam |
-| US-6 | sim | u1-identity-iam |
-
-Atores de aceite (Glue Job, Não-consumidor, Projeto 2) não geram unidades.
+| ID | Atribuída | Unidade primária |
+|----|-----------|------------------|
+| RF-ME1 | sim | u3-identity-ci |
+| RF-ME2 | sim | u3 (uso) / u2 (cria backend) |
+| RF-ME3 | sim | u2-bootstrap |
+| RF-ME4 | sim | u3-identity-ci |
+| RF-ME5 | sim | u3-identity-ci |
+| RF-ME6 | sim | u3-identity-ci |
+| RF-ME7 | sim | u3-identity-ci |

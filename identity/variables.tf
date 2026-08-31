@@ -6,8 +6,13 @@ variable "project_prefix" {
 
 variable "environment" {
   type        = string
-  description = "Ambiente unico desta POC."
+  description = "Ambiente desta conta. Deve ser dev, hom ou prod."
   default     = "dev"
+
+  validation {
+    condition     = contains(["dev", "hom", "prod"], var.environment)
+    error_message = "environment deve ser dev, hom ou prod."
+  }
 }
 
 variable "aws_region" {

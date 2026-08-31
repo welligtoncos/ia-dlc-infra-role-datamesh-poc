@@ -1,4 +1,5 @@
-# Placeholders — copy to terraform.tfvars (gitignored). Do not commit real ARNs.
+# Placeholders — copy to terraform.tfvars (gitignored) for local apply.
+# CI uses -var-file=env/dev.tfvars
 
 project_prefix = "datamesh-poc"
 environment    = "dev"

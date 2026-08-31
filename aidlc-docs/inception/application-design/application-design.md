@@ -1,46 +1,47 @@
-# Application Design — InfraRoles Mini
+# Application Design — Incremento multi-env
 
-Consolidado do design de aplicação (IaC). Detalhe de policies → Design Funcional. Mapeamento AWS → Design de Infraestrutura.
+Consolidado. Policies Glue/Analytics → Design Funcional (SKIP neste incremento; texto POC v1 permanece válido). AWS/OIDC detalhado → Infrastructure Design.
 
-## Decisões
+## Decisões (este incremento)
 
-| Tema | Decisão |
-|------|---------|
-| Componentes | `GlueIdentity`, `AnalyticsIdentity`, `OutputContract` |
-| Bootstrap | Suporte do root, não componente |
-| Serviço | `IdentityPlatform` = um `apply` coeso; rótulo, não fachada |
-| Composição | Plana no root (`glue.tf`, `analytics.tf`, outputs) |
-| Acoplamento roles | Só variáveis compartilhadas |
-| Outputs | Contrato depende das duas identidades; `access_role_arn = null` |
-| US-5 | Build and Test, não componente |
-| Interfaces | Ciclo Terraform + configure/role_arn por identidade |
+| Tema | Q | Decisão |
+|------|---|---------|
+| Componentes novos | Q1-A | `BootstrapStack`, `EnvConfig`, `CiPipelines` |
+| Componentes POC v1 | — | `GlueIdentity`, `AnalyticsIdentity`, `OutputContract` inalterados |
+| Interfaces | Q2-C | Terraform nos dois roots + `CiPipelines.run(env)`; sem destroy no CI |
+| Serviços | Q3-A | `BootstrapService` e `DeployService` |
+| Dependência bootstrap | Q4-A | Só operacional; sem `terraform_remote_state` |
+| Backend | Q5-B | `env/{env}.backend.hcl` commitados |
+| CI | Q6-A | Depende de BootstrapStack + código identity + EnvConfig; YAML não cria AWS |
+| Composição | Q7-A | Plana e desacoplada; IdentityPlatform = rótulo do apply de identidade |
 
 ## Componentes
 
-Ver `components.md`. Três blocos; sem role de Acesso; sem criação de buckets.
+Ver `components.md`.
 
 ## Interfaces
 
-Ver `component-methods.md`. `IdentityPlatform`: `plan` / `apply` / `output` / `destroy`. Identidades: `configure(...)` → `role_arn`. Contrato: `bind(...)` → três outputs.
+Ver `component-methods.md`.
 
-## Serviço
+## Serviços
 
-Ver `services.md`. Orquestração em um apply; identidades em paralelo lógico.
+Ver `services.md`. Bootstrap uma vez; deploy contínuo. Não fundir.
 
 ## Dependências
 
-Ver `component-dependency.md`. OutputContract lê as duas identidades. Glue e Analytics não se referenciam.
+Ver `component-dependency.md`.
 
-## Rastreio histórias
+## Rastreio requisitos
 
-| História | Onde no design |
-|----------|----------------|
-| US-1 | GlueIdentity |
-| US-2 | AnalyticsIdentity |
-| US-3 | OutputContract |
-| US-4 | Variáveis do bootstrap / IdentityPlatform |
-| US-5 | Fora — Build and Test |
-| US-6 | `IdentityPlatform.destroy` |
+| RF | Onde |
+|----|------|
+| RF-ME1 | EnvConfig + validation no identity root |
+| RF-ME2 / Q5-B | `backend.hcl` + init |
+| RF-ME3 | BootstrapStack / BootstrapService |
+| RF-ME4 / RF-ME7 | CiPipelines |
+| RF-ME5 | `run(env)` + var-file CI vs terraform.tfvars local |
+| RF-ME6 | EnvConfig tfvars |
+| POC v1 RF1–RF7 | Glue / Analytics / OutputContract |
 
 ## Conformidade com extensões
 

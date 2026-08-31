@@ -1,0 +1,254 @@
+# Reusable identity deploy. Terraform cwd is identity/; tfvars_path and backend_path are relative to that folder.
+name: deploy-identity
+
+on:
+  workflow_call:
+    inputs:
+      environment_name:
+        description: dev, hom, or prod
+        type: string
+        required: true
+      tfvars_path:
+        description: Path to env tfvars
+        type: string
+        required: true
+      backend_path:
+        description: Path to env backend.hcl (same file for plan and apply init)
+        type: string
+        required: true
+      split_jobs:
+        description: If true, plan job then apply job with GitHub Environment
+        type: boolean
+        required: true
+      github_environment:
+        description: GitHub Environment name (dev job and apply job)
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: identity-${{ inputs.environment_name }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ !inputs.split_jobs }}
+    name: fmt-plan-apply-simulate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ inputs.github_environment }}
+    defaults:
+      run:
+        working-directory: identity
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
+
+      - name: Retry STS after OIDC
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            aws sts get-caller-identity && exit 0
+            n=$((n + 1))
+            echo "STS attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform init
+        env:
+          BACKEND_PATH: ${{ inputs.backend_path }}
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            terraform init -input=false -backend-config="${BACKEND_PATH}" && exit 0
+            n=$((n + 1))
+            echo "init attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -var-file=${{ inputs.tfvars_path }} -out=tfplan -no-color
+
+      - name: Terraform apply
+        run: terraform apply -input=false tfplan
+
+      - name: Simulate principal policy
+        run: |
+          set -euo pipefail
+          SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
+          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
+
+  plan:
+    if: ${{ inputs.split_jobs }}
+    name: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: identity
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
+
+      - name: Retry STS after OIDC
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            aws sts get-caller-identity && exit 0
+            n=$((n + 1))
+            echo "STS attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Terraform fmt
+        run: terraform fmt -check
+
+      - name: Terraform init
+        env:
+          BACKEND_PATH: ${{ inputs.backend_path }}
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            terraform init -input=false -backend-config="${BACKEND_PATH}" && exit 0
+            n=$((n + 1))
+            echo "init attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Terraform plan
+        run: terraform plan -var-file=${{ inputs.tfvars_path }} -out=tfplan -no-color
+
+      - name: Upload tfplan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment_name }}
+          path: identity/tfplan
+          retention-days: 1
+          if-no-files-found: error
+
+  apply:
+    if: ${{ inputs.split_jobs }}
+    name: apply
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: identity
+    environment: ${{ inputs.github_environment }}
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
+
+      - name: Retry STS after OIDC
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            aws sts get-caller-identity && exit 0
+            n=$((n + 1))
+            echo "STS attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Terraform init
+        env:
+          BACKEND_PATH: ${{ inputs.backend_path }}
+        run: |
+          set -euo pipefail
+          n=0
+          until [ "$n" -ge 3 ]; do
+            terraform init -input=false -backend-config="${BACKEND_PATH}" && exit 0
+            n=$((n + 1))
+            echo "init attempt ${n} failed"
+            sleep 10
+          done
+          exit 1
+
+      - name: Download tfplan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ inputs.environment_name }}
+          path: .
+
+      - name: Terraform apply
+        run: terraform apply -input=false tfplan
+
+      - name: Simulate principal policy
+        run: |
+          set -euo pipefail
+          SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
+          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"

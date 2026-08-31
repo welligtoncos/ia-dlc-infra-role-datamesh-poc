@@ -1,0 +1,21 @@
+name: deploy-dev
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  identity:
+    uses: ./.github/workflows/deploy-identity.yml
+    with:
+      environment_name: dev
+      tfvars_path: env/dev.tfvars
+      backend_path: env/dev.backend.hcl
+      split_jobs: false
+      github_environment: dev

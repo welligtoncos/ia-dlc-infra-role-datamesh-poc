@@ -1,24 +1,41 @@
-# Execution Plan
+# Execution Plan — Incremento multi-env (dev / hom / prod + CI)
+
+Plano da POC v1 (uma conta, sem CI): `execution-plan-poc-v1.md` (resumo) / git history.
 
 ## Detailed Analysis Summary
 
 ### Transformation Scope (Brownfield Only)
-- N/A — projeto Greenfield (sem código de aplicação prévio)
+- **Transformation Type**: Infrastructure + deployment model (não muda Glue/Analytics; muda *como* se aplica)
+- **Primary Changes**: Segundo root Terraform (`bootstrap/`); backend S3+DynamoDB no root de identidade; três workflows GitHub Actions; `env/*.tfvars`; validação `environment` in {dev,hom,prod}; README
+- **Related Components**: Root IAM existente (`glue.tf`, `analytics.tf`); `tests/*.sh` (CI) e `tests/*.ps1` (local); `.gitignore`
 
 ### Change Impact Assessment
-- **User-facing changes**: Sim — o engenheiro provisiona/valida/destrói; o analista assume a role de Analytics; Glue Job é ator de aceite
-- **Structural changes**: Sim — nova camada de identidade (roles Glue e Analytics + contrato de outputs)
-- **Data model changes**: Não — sem schemas de aplicação; apenas variáveis e ARNs
-- **API changes**: Sim (contrato) — `terraform output` (`glue_role_arn`, `analytics_role_arn`, `access_role_arn = null`) para o Projeto 2
-- **NFR impact**: Sim — menor privilégio (RNF3, RF7), naming, state local, sem segredos no git; sem alvos de performance/HA (extensões Security/Resiliency/PBT desabilitadas)
+- **User-facing changes**: Não (consumidor analista / Glue Job inalterados). Operador passa a usar pipeline + bootstrap.
+- **Structural changes**: Sim — dois roots Terraform; state remoto por conta; CI
+- **Data model changes**: Não
+- **API changes**: Não no contrato de outputs (`glue_role_arn` etc. permanecem). Backend e tfvars mudam o *apply*.
+- **NFR impact**: Sim — OIDC sem keys, isolamento de conta, aprovação hom/prod; sem HA/perf (extensões off)
 
 ### Component Relationships (Brownfield Only)
-- N/A — Greenfield. Componentes lógicos previstos: bootstrap Terraform, identidade Glue, identidade Analytics, contrato de outputs.
+- **Primary Component**: identity-iam (root na raiz)
+- **Infrastructure Components**: `bootstrap/` (novo); `.github/workflows/` (novo)
+- **Shared Components**: `env/*.tfvars`; naming `project_prefix`+`environment`
+- **Dependent Components**: Projeto 2 (mesmas três contas; fora deste incremento)
+- **Supporting Components**: scripts de simulate; README
+
+| Componente | Tipo de Mudança | Motivo | Prioridade |
+|------------|-----------------|--------|------------|
+| bootstrap/ | Major (novo) | Backend + OIDC; bloqueia CI | Critical |
+| identity root | Minor (backend + validation) | State remoto; env enum | Critical |
+| GitHub workflows | Major (novo) | Apply por ambiente | Critical |
+| env tfvars + gitignore | Configuration | Valores por conta | Critical |
+| tests .sh / .ps1 | Configuration-only | CI chama .sh | Important |
+| glue.tf / analytics.tf | Nenhuma lógica nova | Permanece | Optional |
 
 ### Risk Assessment
-- **Risk Level**: Médio — IAM com menor privilégio; erro de trust/policy quebra ETL ou abre acesso demais; blast radius limitado a uma conta POC
-- **Rollback Complexity**: Easy — `terraform destroy` é critério de aceite (US-6)
-- **Testing Complexity**: Moderate — `apply`/`output`/`destroy` + `simulate-principal-policy` + controles P2 vs Não-consumidor
+- **Risk Level**: Médio — trust OIDC errado ou apply na conta errada; blast radius = IAM daquela conta
+- **Rollback Complexity**: Moderate — destroy do root de identidade por ambiente; bootstrap (OIDC/backend) destroy separado e arriscado se o state já estiver no S3
+- **Testing Complexity**: Moderate — validate local + workflows (OIDC só com contas reais); simulate no CI após apply
 
 ## Workflow Visualization
 
@@ -30,16 +47,16 @@ flowchart TD
 
     subgraph INCEPTION["INCEPTION PHASE"]
         WD["Workspace Detection<br/>COMPLETED"]
-        RE["Reverse Engineering<br/>SKIP"]
+        RE["Reverse Engineering<br/>COMPLETED"]
         RA["Requirements Analysis<br/>COMPLETED"]
-        US["User Stories<br/>COMPLETED"]
+        US["User Stories<br/>SKIP"]
         WP["Workflow Planning<br/>EXECUTE"]
         AD["Application Design<br/>EXECUTE"]
         UG["Units Generation<br/>EXECUTE"]
     end
 
     subgraph CONSTRUCTION["CONSTRUCTION PHASE"]
-        FD["Functional Design<br/>EXECUTE"]
+        FD["Functional Design<br/>SKIP"]
         NFRA["NFR Requirements<br/>EXECUTE"]
         NFRD["NFR Design<br/>EXECUTE"]
         ID["Infrastructure Design<br/>EXECUTE"]
@@ -52,14 +69,14 @@ flowchart TD
     end
 
     Start --> WD
-    WD --> RA
-    WD -.-> RE
-    RA --> US
-    US --> WP
+    WD --> RE
+    RE --> RA
+    RA --> WP
+    RA -.-> US
     WP --> AD
     AD --> UG
-    UG --> FD
-    FD --> NFRA
+    UG --> NFRA
+    UG -.-> FD
     NFRA --> NFRD
     NFRD --> ID
     ID --> CG
@@ -68,18 +85,18 @@ flowchart TD
     BT -.-> OPS
 
     style WD fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style RE fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style RA fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style US fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style CG fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style BT fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style WP fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style AD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style UG fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style FD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style NFRA fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style NFRD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style ID fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style RE fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    style CG fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style BT fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    style US fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    style FD fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
     style OPS fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
     style Start fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
     style End fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
@@ -94,18 +111,18 @@ flowchart TD
 ```
 INCEPTION
 - Workspace Detection: COMPLETED
-- Reverse Engineering: SKIP (greenfield)
+- Reverse Engineering: COMPLETED
 - Requirements Analysis: COMPLETED
-- User Stories: COMPLETED
+- User Stories: SKIP (CI/CD; operador, nao persona de runtime)
 - Workflow Planning: EXECUTE (this stage)
 - Application Design: EXECUTE
 - Units Generation: EXECUTE
 
-CONSTRUCTION (one unit loop)
-- Functional Design: EXECUTE
-- NFR Requirements: EXECUTE (minimal/standard)
-- NFR Design: EXECUTE (minimal)
-- Infrastructure Design: EXECUTE
+CONSTRUCTION
+- Functional Design: SKIP (sem nova regra Glue/Analytics)
+- NFR Requirements: EXECUTE (OIDC, isolamento, sem keys)
+- NFR Design: EXECUTE (padroes OIDC/backend)
+- Infrastructure Design: EXECUTE (3 contas, backend, GHA)
 - Code Generation: EXECUTE (always)
 - Build and Test: EXECUTE (always)
 
@@ -117,65 +134,80 @@ OPERATIONS
 
 ### INCEPTION PHASE
 - [x] Workspace Detection (COMPLETED)
-- [x] Reverse Engineering (SKIPPED — Greenfield, sem código)
+- [x] Reverse Engineering (COMPLETED)
 - [x] Requirements Analysis (COMPLETED)
-- [x] User Stories (COMPLETED — P1/P2, US-1 a US-6, Não-consumidor)
+- [x] User Stories (SKIPPED — CI/CD / infra de deploy; sem jornadas novas de Analista/Glue)
 - [x] Execution Plan (IN PROGRESS — awaiting approval)
 - [ ] Application Design - EXECUTE
-  - **Rationale**: Componentes novos (identidade Glue, identidade Analytics, bootstrap, contrato de outputs). Precisa limites e dependências antes das unidades. Profundidade adaptada a IaC (não camada de serviço HTTP).
+  - **Rationale**: Componentes novos (`bootstrap`, workflows, role OIDC, backend) e dependência ovo-e-galinha com o root de identidade. Precisa limites antes das unidades.
 - [ ] Units Generation - EXECUTE
-  - **Rationale**: IaC greenfield exige mapa história→unidade e organização de código na raiz. Expectativa: **uma unidade** (root Terraform, um `apply`), com arquivos por role já decididos.
+  - **Rationale**: Dois roots Terraform + CI. Rascunho: **U2 bootstrap** (por conta, local) depois **U3 identity-ci** (backend no root, tfvars, workflows, README). Confirmado neste estágio.
 
 ### CONSTRUCTION PHASE
-- [ ] Functional Design - EXECUTE
-  - **Rationale**: Regras de trust, matriz de permissões (sor/sot/spec/Athena) e controles P2 vs Não-consumidor são a lógica de negócio desta POC.
+- [ ] Functional Design - SKIP
+  - **Rationale**: RF1–RF7 da identidade não mudam. Trust OIDC e gatilhos são desenho de infra, não regras de negócio de dados.
 - [ ] NFR Requirements - EXECUTE (profundidade mínima/padrão)
-  - **Rationale**: RNFs de segurança e higiene IaC existem (RNF1–RNF8). Stack já indicada no requirements; este estágio confirma e registra decisões. Extensões Security/Resiliency/PBT permanecem N/A.
+  - **Rationale**: Novos NFRs: OIDC, least privilege da deploy role, environments GitHub, sem keys. Stack: Actions + AWS provider já conhecido.
 - [ ] NFR Design - EXECUTE (profundidade mínima)
-  - **Rationale**: Só se NFR Requirements executar. Padrões: menor privilégio, justificativa de `Resource *`, gitignore de state/tfvars.
+  - **Rationale**: Segue NFR Requirements. Padrões: `sub` OIDC restrito, versionamento S3, environments protected.
 - [ ] Infrastructure Design - EXECUTE
-  - **Rationale**: O produto é infraestrutura AWS IAM (região, naming, outputs, backend local).
+  - **Rationale**: O incremento *é* infra: S3/DDB, OIDC provider, IAM deploy, GitHub Environments, backend-config.
 - [ ] Code Generation - EXECUTE (ALWAYS)
-  - **Rationale**: Terraform na raiz do workspace (`glue.tf`, `analytics.tf`, versions/variables/outputs).
+  - **Rationale**: `bootstrap/`, `.github/workflows/`, `env/`, backend no root, `.gitignore`, README.
 - [ ] Build and Test - EXECUTE (ALWAYS)
-  - **Rationale**: `validate`/`plan`/`apply`/`output`/`simulate-principal-policy`/`destroy` alinhados a US-5 e US-6.
+  - **Rationale**: `fmt`/`validate` nos dois roots; instruções de bootstrap + pipeline; simulate `.sh` no CI.
 
 ### OPERATIONS PHASE
 - [ ] Operations - PLACEHOLDER
-  - **Rationale**: Sem CI/CD, monitoramento ou runbook de produção nesta POC.
+  - **Rationale**: Pipelines *são* o entregável de construction; Operations continua placeholder (sem runbook de prod além do README).
 
-## Package Change Sequence (Brownfield Only)
-- N/A
+## Package Change Sequence (Brownfield)
+
+## Module Update Strategy
+- **Update Approach**: Sequential (bootstrap bloqueia o resto)
+- **Critical Path**: bootstrap por conta → vars GitHub Environment → identity root + workflows
+- **Coordination Points**: nomes de bucket/tabela de state; ARN da deploy role; `environment` no tfvars
+- **Testing Checkpoints**: validate bootstrap; validate identity com backend parcial; workflow YAML review
+
+1. **bootstrap/** — Must-update-first (cria OIDC + state)
+2. **identity root** (`versions.tf` backend, `variables.tf` validation) — depende do bootstrap
+3. **env/*.tfvars + .gitignore** — junto com o root
+4. **.github/workflows** — depende da role OIDC e dos tfvars
+5. **README + tests** — último (documenta ordem e .sh vs .ps1)
 
 ## Unidades previstas (rascunho, confirmado na Geração de Unidades)
 
-| Unidade | Escopo | Histórias |
-|---------|--------|-----------|
-| U1 identity-iam | Root Terraform: bootstrap + Glue + Analytics + outputs | US-1 a US-6 |
+| Unidade | Escopo | Dependência |
+|---------|--------|-------------|
+| U2 bootstrap | Root `bootstrap/`: S3, DynamoDB, OIDC GitHub, deploy role | Nenhuma (admin local) |
+| U3 identity-ci | Backend no root IAM, env tfvars, 3 workflows, gitignore, README | U2 aplicado na conta alvo |
 
-Um `apply` único. Sem submódulo (`modules/iam-roles` foi rejeitado).
+Glue/Analytics HCL existente só ganha backend + validation de `environment`; sem reescrever policies.
 
 ## Estimated Timeline
-- **Total Phases (restantes após este plano)**: 8 a executar (AD, UG, FD, NFRA, NFRD, ID, CG, BT)
-- **Estimated Duration**: Sequência linear em uma unidade; profundidade padrão no design funcional/infra e mínima nos NFRs. Sem calendário de sprints neste estágio.
+- **Total Phases (restantes após este plano)**: 6 a executar (AD, UG, NFRA, NFRD, ID, CG) + BT
+- **Estimated Duration**: Sequência linear; duas unidades construction (U2 depois U3). Sem calendário de sprints.
 
 ## Success Criteria
-- **Primary Goal**: Roles Glue e Analytics reproduzíveis, menor privilégio, contrato de ARNs para o Projeto 2
-- **Key Deliverables**: Código Terraform na raiz; outputs `glue_role_arn`, `analytics_role_arn`, `access_role_arn=null`; instruções de build/teste
-- **Quality Gates**: apply sem erro; outputs corretos; simulate allow na POC e deny fora; destroy limpo; sem `Resource *` sem justificativa; state/tfvars reais fora do git
+- **Primary Goal**: Apply isolado em 3 contas via 3 pipelines OIDC; bootstrap reproduzível
+- **Key Deliverables**: `bootstrap/`; workflows deploy-dev/hom/prod; `env/*.tfvars`; backend remoto; README (branch `hom`, var-file local vs CI, .ps1 vs .sh)
+- **Quality Gates**: validate nos dois roots; hom/prod com `environment:` protection; CI usa `-var-file` e `.sh`; local documentado sem `-var-file`
+- **Integration Testing**: documentar; OIDC real exige contas + repo GitHub
+- **Operational Readiness**: README de setup; Operations placeholder
 
 ## Conformidade com extensões
 
 | Extensão | Status | Justificativa |
 |----------|--------|---------------|
-| Security Baseline | N/A | Desabilitada; menor privilégio via RF7/RNF3 nos estágios FD/NFR/código |
+| Security Baseline | N/A | Desabilitada; OIDC + aprovação via RFs |
 | Resiliency Baseline | N/A | Desabilitada |
 | Property-Based Testing | N/A | Desabilitada |
 
 ## Controle do usuário
 
-Este plano é recomendação. Você pode:
-- Incluir Engenharia Reversa (não agrega valor: workspace vazio)
-- Pular Application Design ou Units (não recomendado: componentes e mapa de histórias ainda não formalizados)
-- Pular NFR Requirements/Design (possível, pois a stack já está no requirements; o menor privilégio migraria só para FD + código)
-- Pular Infrastructure Design (não recomendado: o entregável é IAM AWS)
+Você pode:
+- Incluir User Stories (operador/aprovador)
+- Incluir Functional Design (se quiser formalizar trust OIDC como regra de negócio)
+- Pular Application Design ou Units (não recomendado: dois roots + CI ainda não mapeados)
+- Pular NFR Requirements/Design (OIDC iria só para Infrastructure Design + código)
+- Pular Infrastructure Design (não recomendado: o entregável é AWS + GitHub)

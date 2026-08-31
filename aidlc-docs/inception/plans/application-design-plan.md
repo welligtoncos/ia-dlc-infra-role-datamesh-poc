@@ -1,8 +1,8 @@
-# Application Design Plan — InfraRoles Mini
+# Application Design Plan — Incremento multi-env
 
 **Estágio**: INCEPTION — Design da Aplicação (planejamento)
-**Fontes**: `requirements.md`, `stories.md`, `personas.md`, `execution-plan.md`
-**Adaptação**: IaC Terraform (sem API HTTP). Componentes = blocos lógicos de identidade; “métodos” = interfaces (entradas/saídas), não classes.
+**Fontes**: `requirements.md`, `execution-plan.md`, RE, POC v1 (`application-design-plan-poc-v1.md`)
+**Adaptação**: IaC Terraform + GitHub Actions (sem API HTTP). Componentes = blocos lógicos; “métodos” = interfaces (entradas/saídas / operações).
 
 Preencha cada `[Answer]:`. A geração dos artefatos em `aidlc-docs/inception/application-design/` só começa após as respostas (e esclarecimentos, se houver).
 
@@ -10,127 +10,132 @@ Preencha cada `[Answer]:`. A geração dos artefatos em `aidlc-docs/inception/ap
 
 ## Contexto já fechado (não perguntar de novo)
 
-- Root module plano; um arquivo por role (`glue.tf`, `analytics.tf`); sem `modules/iam-roles`
-- Sem role de Acesso; output `access_role_arn = null`
-- Buckets só referenciados (`sor` / `sot` / `spec` + Athena results)
-- Glue Job e Não-consumidor são atores de aceite, não componentes de software
+- Três contas fixas; uma pipeline GitHub Actions por ambiente; OIDC; sem access keys
+- `bootstrap/` aplicado **uma vez por conta** (admin local): S3 + DynamoDB + OIDC provider + deploy role
+- Root de identidade (Glue/Analytics) **não** muda de propósito; ganha backend remoto + `environment` in {dev,hom,prod}
+- CI: `-var-file=env/{env}.tfvars`; local: `terraform.tfvars` sem `-var-file`
+- Simulate: `.sh` no CI, `.ps1` no Windows; branch `hom` obrigatória no remote
+- GlueIdentity / AnalyticsIdentity / OutputContract da POC v1 **permanecem** dentro do root de identidade
+- Sem Terragrunt, sem Terraform Cloud, sem criar contas Organizations
 
 ---
 
 ## Perguntas de design
 
 ## Question 1
-Quais limites de componentes lógicos devem aparecer em `components.md`?
+Quais limites de componentes lógicos novos devem aparecer em `components.md` (além de GlueIdentity, AnalyticsIdentity, OutputContract da POC v1)?
 
-A) Quatro: `TerraformBootstrap` (versions/provider/vars/tags), `GlueIdentity`, `AnalyticsIdentity`, `OutputContract`
+A) Três novos: `BootstrapStack` (S3, DynamoDB, OIDC provider, deploy role), `EnvConfig` (tfvars + backend-config), `CiPipelines` (três workflows)
 
-B) Três: `GlueIdentity`, `AnalyticsIdentity`, `OutputContract` — bootstrap não é componente, só suporte do root
+B) Dois novos: `BootstrapStack` e `CiPipelines` — tfvars/backend-config são interface do root de identidade, não componente
 
-C) Dois: `GlueIdentity` e `AnalyticsIdentity` — outputs e bootstrap não são componentes (só arquivos do root)
+C) Quatro novos: separar `DeployRole` (OIDC) de `StateBackend` (S3+DDB) além de `EnvConfig` e `CiPipelines`
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:B	3 componentes (Glue, Analytics, OutputContract); bootstrap é suporte
+[Answer]: A — três novos (BootstrapStack, EnvConfig, CiPipelines). Cada um tem responsabilidade, ciclo de vida e operador diferentes: bootstrap é admin local/uma vez, EnvConfig é configuração versionada, CiPipelines é automação contínua. Juntar EnvConfig no root (B) esconde que os tfvars + backend-config são a superfície de variação por ambiente — que é justamente o ponto central do incremento. Separar OIDC de StateBackend (C) fragmenta demais o que nasce e morre junto num único apply de bootstrap.
 
 ---
 
 ## Question 2
-Como representar “métodos” / interfaces em `component-methods.md` (não há classes)?
+Como representar “métodos” / interfaces em `component-methods.md`?
 
-A) Interface por componente = variáveis de entrada + atributos de saída (ex.: GlueIdentity entra buckets/prefix; sai `role_arn`)
+A) `BootstrapStack.apply_once` / `destroy_local`; Identity root `plan`/`apply`/`output` (inalterado); `CiPipelines.run(env)` com sequência fmt→validate→plan→apply→simulate.sh
 
-B) Interface = operações Terraform do root (`plan`, `apply`, `output`, `destroy`) e os componentes só declaram recursos, sem “métodos” próprios
+B) Só operações Terraform dos dois roots; workflows são detalhe de Construction, sem “métodos” de componente CI
 
-C) Híbrido: root expõe `plan`/`apply`/`output`/`destroy`; cada identidade declara entradas (vars) e saída (`role_arn`)
+C) Híbrido: Terraform nos dois roots + `CiPipelines.run(env)`; sem `destroy` na interface de CI (já é não-objetivo)
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:C	Interface em 2 níveis: ciclo Terraform + entradas/saída por componente
+[Answer]: C — híbrido. Terraform nos dois roots (BootstrapStack.apply_once/destroy_local, Identity plan/apply/output) + CiPipelines.run(env) com a sequência completa. Sem destroy na interface de CI (já é não-objetivo). B esconderia o workflow como "detalhe" quando ele é um dos três entregáveis do incremento; A incluiria destroy que os requisitos excluem.
 
 ---
 
 ## Question 3
 O que é a “camada de serviço” em `services.md`?
 
-A) Um serviço `IdentityPlatform`: um único `terraform apply` orquestra bootstrap + as duas identidades + outputs
+A) Dois serviços: `BootstrapService` (apply local uma vez por conta) e `DeployService` (GitHub Actions orquestra o root de identidade). Nenhum apply único cobre os dois.
 
-B) Sem serviço: só componentes; o root Terraform é orquestrador implícito, documentado em uma frase em `services.md`
+B) Um serviço `MultiEnvIdentity`: o runbook do engenheiro é a orquestração (bootstrap depois pipeline); CI não é serviço, só ferramenta
 
-C) Dois “serviços” lógicos (Glue vs Analytics) mesmo com um único apply — orquestração só compartilhando variáveis
+C) Três serviços (um por ambiente) mesmo com o mesmo código — orquestração só por isolation de conta
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:A	Serviço lógico IdentityPlatform = o apply coeso
+[Answer]: A — dois serviços: BootstrapService (local, uma vez) e DeployService (CI, contínuo). Eles têm ciclos de vida opostos — o bootstrap roda uma vez e é esquecido; o deploy roda a cada push. Fundir num serviço (B) esconde essa diferença fundamental. Três por ambiente (C) é artificial — é o mesmo código, mesma pipeline, só os valores mudam.
 
 ---
 
 ## Question 4
-Qual o acoplamento permitido entre GlueIdentity e AnalyticsIdentity?
+Como o root de identidade depende do bootstrap (backend já existe na conta)?
 
-A) Zero dependência IAM entre roles; compartilham só variáveis de naming e nomes de buckets (acoplamento de configuração)
+A) Dependência **operacional** só: o engenheiro aplica bootstrap antes; o identity root **não** usa `terraform_remote_state` nem data source dos outputs do bootstrap. CI recebe bucket/tabela/role via vars GitHub / `-backend-config`.
 
-B) AnalyticsIdentity pode referenciar o ARN/nome da GlueIdentity (dependência declarada)
+B) Identity root lê outputs do bootstrap via `terraform_remote_state` (state local do bootstrap ou S3 após migrar)
 
-C) Policy documents compartilhados (mesmo conjunto de ações S3), parametrizados por role
+C) Identity root é um módulo que chama `bootstrap` (um apply só) — rejeita o ovo-e-galinha da role OIDC
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:A	Roles independentes; só acoplamento de configuração
+[Answer]: A — dependência operacional só. O identity root não usa terraform_remote_state nem data source do bootstrap. O CI recebe bucket/tabela/role via vars GitHub e -backend-config. Isso é mais limpo e mais seguro: B acopla os states (o root precisa saber onde está o state do bootstrap — circular se o bootstrap é local); C rejeita o ovo-e-galinha sem resolvê-lo.
 
 ---
 
 ## Question 5
-O `OutputContract` (`glue_role_arn`, `analytics_role_arn`, `access_role_arn=null`) depende de quais componentes?
+Onde vive a configuração do backend S3 do identity root?
 
-A) Depende de GlueIdentity e AnalyticsIdentity (lê os ARNs); `access_role_arn` é constante `null` no próprio contrato
+A) Backend **parcial** no `versions.tf` (sem bucket/key); CI e docs passam `-backend-config` (e opcionalmente `env/{env}.backend.hcl` não commitado ou commitado)
 
-B) Não é componente; cada identidade publica seu output e o null de Acesso vive num `outputs.tf` sem dono lógico
+B) Arquivos commitados `env/dev.backend.hcl`, `env/hom.backend.hcl`, `env/prod.backend.hcl` (bucket/key/table placeholders) + `terraform init -backend-config=...`
 
-C) Contrato é o único ponto visível ao Projeto 2; identidades não “exportam” nada além do que o contrato agrega
+C) `backend "s3"` completo no `.tf` com placeholders de bucket; um único bloco (não serve para 3 contas sem edição)
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:A	OutputContract depende das 2 identidades; null é constante
+[Answer]: B — arquivos commitados env/{env}.backend.hcl (bucket, key, table, region — com placeholders). O terraform init -backend-config=env/dev.backend.hcl é explícito e auditável. A (backend parcial sem arquivo) funciona mas esconde a configuração nos workflows YAML, menos visível. C (bloco completo no .tf) não serve para 3 contas sem editar o código. B dá rastreabilidade no git sem hardcodar valores no .tf.
 
 ---
 
 ## Question 6
-Onde fica a validação US-5 (`simulate-principal-policy`, P2 vs Não-consumidor) neste design de aplicação?
+`CiPipelines` depende de quais componentes?
 
-A) Fora dos componentes de runtime — preocupação de Build and Test / verificação, só mencionada como dependência de qualidade
+A) Depende de `BootstrapStack` (role OIDC já existe) e do **código** do identity root + `EnvConfig`; **não** declara resources AWS. Glue/Analytics só entram depois do `apply` do identity.
 
-B) Componente lógico `IdentityVerification` (não vira resource AWS; descreve o contrato de teste)
+B) Depende só do identity root; bootstrap é premissa documental, não dependência de design
 
-C) Métodos de verificação anexados a GlueIdentity e AnalyticsIdentity (ex.: `assertLeastPrivilege`)
+C) CiPipelines também “possui” o simulate e o fmt — IdentityVerification da POC v1 continua fora (Build/Test), mas o workflow **chama** o script
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:A	Validação US-5 é Build/Test, não componente
+[Answer]: A — depende de BootstrapStack (a role OIDC precisa existir) e do código do identity root + EnvConfig (os tfvars que o workflow referencia). Não declara resources AWS — é YAML, não Terraform. B subestima a dependência do bootstrap (sem a role OIDC, o workflow falha no primeiro passo). C mistura "o workflow chama o script" (que é verdade) com ownership — o simulate continua sendo verificação (Build/Test), não componente da pipeline; o workflow apenas invoca.  
 
 ---
 
 ## Question 7
-Padrão de composição do root (já decidido um arquivo por role — isto só fecha o diagrama de dependências)?
+Padrão de composição (dois roots + CI)?
 
-A) Composição plana: root referencia os quatro (ou os componentes da Q1) sem camada extra
+A) Composição **plana e desacoplada**: dois states Terraform independentes; GitHub YAML não é Terraform; IdentityPlatform da POC v1 continua o rótulo do apply de identidade
 
-B) Fachada `IdentityPlatform` na frente dos componentes, mesmo sem submódulo Terraform
+B) Fachada única `MultiEnvPlatform` na documentação, mesmo sem um apply que una bootstrap + identity
+
+C) Terragrunt / wrapper que chama os dois roots em ordem (não está nos requisitos)
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]:A	Composição plana; IdentityPlatform é rótulo, não camada
+[Answer]: A — composição plana e desacoplada. Dois states independentes, GitHub YAML não é Terraform, IdentityPlatform da POC v1 continua como rótulo do apply de identidade. B inventaria uma fachada para algo que não tem um apply unificador. C (Terragrunt) está explicitamente fora dos requisitos.
 
 ---
 
 ## Checklist de execução (após respostas + aprovação do plano, se pedida)
 
-- [x] Carregar requirements, stories e este plano
-- [x] Gerar `aidlc-docs/inception/application-design/components.md`
-- [x] Gerar `aidlc-docs/inception/application-design/component-methods.md` (interfaces, sem regras de policy detalhadas)
+- [x] Carregar requirements, execution-plan, RE e respostas deste plano
+- [x] Gerar `aidlc-docs/inception/application-design/components.md` (POC v1 + componentes novos)
+- [x] Gerar `aidlc-docs/inception/application-design/component-methods.md`
 - [x] Gerar `aidlc-docs/inception/application-design/services.md`
 - [x] Gerar `aidlc-docs/inception/application-design/component-dependency.md` (matriz + mermaid + alternativa texto)
-- [x] Gerar `aidlc-docs/inception/application-design/application-design.md` (consolidado)
-- [x] Validar: US-1..US-6 cobertas; `access_role_arn=null`; sem role de Acesso; sem criar buckets
+- [x] Gerar `aidlc-docs/inception/application-design/application-design.md` (consolidado; emenda à POC v1, não apagar Glue/Analytics)
+- [x] Validar: RF-ME1–RF-ME7; ovo-e-galinha; var-file CI vs local; .sh vs .ps1; branch hom
 - [x] Atualizar checkboxes e `aidlc-state.md`
 
 ---
@@ -138,5 +143,6 @@ X) Other (please describe after [Answer]: tag below)
 ## Regras da geração
 
 - Idioma: português
-- Sem lista de `aws_iam_*` resources (isso é Construction)
+- Sem lista completa de `aws_*` / YAML steps (isso é Construction / Infrastructure Design)
 - Extensões Security / Resiliency / PBT: N/A
+- Preservar GlueIdentity, AnalyticsIdentity, OutputContract; este incremento **acrescenta** limites, não substitui a identidade

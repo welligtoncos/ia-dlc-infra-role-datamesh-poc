@@ -1,35 +1,29 @@
-# Instrucoes de Testes de Seguranca
+# Instruções de Testes de Segurança
 
-Nao e pentest. Foco: menor privilegio (US-5) e higiene do repo.
+Não é pentest. Extensão Security Baseline **desabilitada**. Foco: OIDC, gitignore, simulate IAM.
 
-## Autorizacao (simulate)
+## Autorização (simulate)
 
-Apos apply, na raiz:
+**Local (Windows), após apply da identidade:**
 
 ```powershell
-.\tests\simulate-principal-policy.ps1 -SorBucket "<sor_bucket>"
+Set-Location identity
+..\tests\simulate-principal-policy.ps1 -SorBucket "<sor_bucket>"
 ```
 
-```bash
-bash tests/simulate-principal-policy.sh "<sor_bucket>"
-```
+**CI (Linux):** `tests/simulate-principal-policy.sh` (o workflow já chama). Não usar `.ps1` no Actions.
 
-Esperado:
+Esperado: Glue allow GetObject na POC; deny fora; Analytics allow GetObject; deny PutObject na camada.
 
-- Glue **allow** `s3:GetObject` no bucket da POC
-- Glue **deny**/implicit deny em bucket fora da POC
-- Analytics **allow** GetObject na camada
-- Analytics **deny** PutObject na camada
+Se falhar logo após apply: esperar 10–20 s. Se AccessDenied em `SimulatePrincipalPolicy`, emendar a policy da deploy role no bootstrap.
 
-Se falhar logo apos o apply: esperar 10–20 s (consistencia IAM) e repetir.
+## Checks estáticos
 
-## Checks estaticos
+- Sem access keys nos workflows
+- Trust OIDC: `aud` + `sub` environment **e** ref da branch (job plan)
+- `.gitignore`: `*.tfstate*`; `*.tfvars` com exceções `identity/example.tfvars`, `bootstrap/example.tfvars`, `identity/env/*.tfvars`
+- Artifact `tfplan` retention 1 dia; não no S3
 
-- Nenhuma AWS managed `*FullAccess`
-- `Resource: "*"` so em `lakeformation:GetDataAccess` (comentado no `.tf`)
-- `.gitignore` cobre state e `*.tfvars` (exceto `example.tfvars`)
-- `example.tfvars` so placeholders
+## Dependências
 
-## Dependencias
-
-Provider pinado em `.terraform.lock.hcl`. Sem scanner SCA obrigatorio (extensao Security desabilitada).
+Lockfiles `hashicorp/aws` ~> 5.0. Sem SCA obrigatório.

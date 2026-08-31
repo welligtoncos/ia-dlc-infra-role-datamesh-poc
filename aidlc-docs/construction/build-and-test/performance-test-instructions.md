@@ -1,19 +1,18 @@
-# Instrucoes de Testes de Desempenho
+# Instruções de Testes de Desempenho
 
-## Proposito
+## Propósito
 
-Os NFR desta unidade **nao definem SLO** de latencia, throughput ou usuarios concorrentes. IAM e servico gerenciado da AWS; `apply` em tempo de engenheiro e aceitavel.
+NFR desta POC: **sem SLO**. Job CI com `timeout-minutes: 20`. IAM-only.
 
 ## Requisitos de Desempenho
 
-- **Tempo de Resposta / Throughput / Usuarios concorrentes / Taxa de erro**: N/A
+- **Tempo de Resposta**: N/A
+- **Throughput**: N/A
+- **Usuários Concorrentes**: N/A (concurrency Terraform = um apply por env)
+- **Taxa de Erro**: N/A
 
-## Executar Testes de Desempenho
+Não executar JMeter/k6. Se um job passar de 20 minutos, o Actions cancela (travamento, não carga).
 
-Nao executar JMeter/k6 para esta POC.
+## Otimização
 
-Se no futuro houver alvo: medir duracao de `terraform apply` em conta vazia de identidade (informal, sem meta).
-
-## Status
-
-**N/A** — alinhado a `nfr-requirements.md`.
+Não aplicável. Sem `actions/cache` de providers (NFR Design).

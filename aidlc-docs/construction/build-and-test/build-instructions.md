@@ -1,60 +1,96 @@
 # Instruções de Build
 
+Incremento multi-env: dois roots Terraform (`bootstrap/` = U2; `identity/` = identidade U1+U3) e workflows GitHub Actions.
+
 ## Pré-requisitos
 
-- **Ferramenta de Build**: Terraform >= 1.7.5
-- **Dependências**: AWS CLI v2 (para simulate); provider `hashicorp/aws` ~> 5.0 (lockfile na raiz)
-- **Variáveis de Ambiente**: credenciais AWS na default chain (`AWS_PROFILE` / `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`)
-- **Requisitos de Sistema**: Windows, Linux ou macOS; ~200 MB para `.terraform/`; rede no primeiro `init`
+- **Ferramenta de Build**: Terraform >= 1.7.5 (CI pin 1.9.8)
+- **Dependências**: AWS CLI v2 (simulate); provider `hashicorp/aws` ~> 5.0 (lockfiles em `identity/` e `bootstrap/`); GitHub Actions (pipelines)
+- **Variáveis de Ambiente**: default chain para apply **local**; CI usa OIDC (`AWS_ROLE_ARN_DEV` / `_HOM` / `_PROD`, `AWS_REGION`)
+- **Requisitos de Sistema**: Windows, Linux ou macOS; ~200 MB por `.terraform/`; rede no primeiro `init`
 
 ## Etapas de Build
 
 ### 1. Instalar Dependências
 
-```bash
+```powershell
 terraform version   # >= 1.7.5
-aws --version       # opcional ate o simulate
+aws --version       # para simulate
 ```
 
 ### 2. Configurar Ambiente
 
-```bash
-cd d:/projetos-ia-aws/ia-dlc-infra-role-datamesh-poc
-cp example.tfvars terraform.tfvars
-# editar terraform.tfvars: buckets, workgroup, analytics_principal_arns da SUA conta
+**Bootstrap (uma vez por conta, admin):**
+
+```powershell
+Set-Location bootstrap
+Copy-Item example.tfvars terraform.tfvars
+# github_owner, github_repo, environment
+```
+
+**Identidade (local, Windows — sem `-var-file=`):**
+
+```powershell
+Set-Location ..\identity
+Copy-Item env\dev.tfvars terraform.tfvars
+# ARNs e buckets reais da conta deste environment
 ```
 
 ### 3. Compilar Todas as Unidades
 
-Unidade unica `u1-identity-iam` (root Terraform):
+**U2 — `bootstrap/`** (backend local):
 
-```bash
+```powershell
+Set-Location bootstrap
 terraform init
 terraform fmt -check
 terraform validate
-terraform plan -var-file=terraform.tfvars -out=tfplan
+terraform plan
 ```
 
-`apply` e implantacao, nao compile:
+**U3 — `identity/`** (backend S3; precisa do bootstrap já aplicado **ou** `init -backend=false` só para validate):
 
-```bash
-terraform apply tfplan
+```powershell
+Set-Location ..\identity
+terraform init -backend=false
+terraform fmt -check
+terraform validate
 ```
+
+Primeiro init **remoto** (conta já tinha state local):
+
+```powershell
+terraform init -backend-config=env/dev.backend.hcl -migrate-state
+```
+
+Conta nova:
+
+```powershell
+terraform init -backend-config=env/dev.backend.hcl
+terraform plan
+```
+
+CI (Linux, `working-directory: identity`): `fmt -check` → `init -backend-config=env/{env}.backend.hcl` → `validate` → `plan -var-file=env/{env}.tfvars -out=tfplan` → `apply tfplan`.
 
 ### 4. Verificar Sucesso do Build
 
-- **Saída Esperada**: `terraform validate` → `Success! The configuration is valid.`
-- **Artefatos**: `.terraform/` (local), `.terraform.lock.hcl` (git), `tfplan` (opcional, nao commitar)
-- **Avisos Comuns**: provider AWS baixa na primeira vez; `check` de conta so avalia no `plan` (precisa credencial)
+- **Saída Esperada**: `terraform validate` → `Success! The configuration is valid.` nos dois roots
+- **Artefatos**: `.terraform/` local (gitignored); `.terraform.lock.hcl` em `identity/` e `bootstrap/` (git)
+- **Avisos Comuns**: `backend "s3" {}` em `identity/` exige `-backend-config` ou `-backend=false`; PowerShell não usa `-var-file=` sem aspas
 
-## Solucao de Problemas
+## Solução de Problemas
 
-### Build Falha com Erros de Dependencia
+### Build Falha com Erros de Dependência
 
-- **Causa**: sem rede no `init`; versao Terraform < 1.7.5
-- **Solucao**: atualizar Terraform; repetir `terraform init`
+- **Causa**: sem rede no `init`; Terraform < 1.7.5
+- **Solução**: atualizar Terraform; repetir `terraform init`
 
-### Build Falha com Erros de Compilacao
+### Build Falha com Erros de Compilação
 
-- **Causa**: `analytics_principal_arns` vazia ou ARN invalido; `plan` sem credencial AWS
-- **Solucao**: corrigir `terraform.tfvars`; configurar default chain; ARNs devem ser user/role da conta atual
+- **Causa**: `environment` fora de {dev,hom,prod}; `analytics_principal_arns` inválida; backend.hcl com bucket inexistente
+- **Solução**: corrigir tfvars; aplicar U2 antes do init remoto; migrate se state local existir
+
+### Init remoto vê state vazio e tenta recriar roles
+
+- **Causa**: não rodou `-migrate-state` após POC v1
+- **Solução**: em `identity/`, `terraform init -backend-config=env/{env}.backend.hcl -migrate-state` com admin **antes** do CI

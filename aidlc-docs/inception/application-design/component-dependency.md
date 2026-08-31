@@ -1,58 +1,68 @@
-# Component Dependency — InfraRoles Mini
+# Component Dependency — Incremento multi-env
 
 ## Matriz
 
-| De \\ Para | GlueIdentity | AnalyticsIdentity | OutputContract | IdentityPlatform (rótulo) |
-|------------|--------------|-------------------|----------------|---------------------------|
-| GlueIdentity | — | nenhuma | fornece `role_arn` | contido no apply |
-| AnalyticsIdentity | nenhuma | — | fornece `role_arn` | contido no apply |
-| OutputContract | lê ARN | lê ARN | — | contido no apply |
-| Bootstrap (suporte) | vars compartilhadas | vars compartilhadas | — | parte do root |
+| De \\ Para | BootstrapStack | EnvConfig | CiPipelines | GlueIdentity | AnalyticsIdentity | OutputContract |
+|------------|----------------|-----------|-------------|--------------|-------------------|----------------|
+| BootstrapStack | — | naming opcional | habilita OIDC (ops) | nenhuma no grafo TF | nenhuma | nenhuma |
+| EnvConfig | nenhuma | — | lido pelo workflow | lido no apply | lido no apply | indireto (vars) |
+| CiPipelines | operacional (role deve existir) | `-var-file` + `-backend-config` | — | após apply | após apply | após apply |
+| GlueIdentity | nenhuma (TF) | vars | nenhuma | — | nenhuma | fornece ARN |
+| AnalyticsIdentity | nenhuma (TF) | vars | nenhuma | nenhuma | — | fornece ARN |
+| OutputContract | nenhuma | nenhuma | nenhuma | lê ARN | lê ARN | — |
 
-**Acoplamento Glue ↔ Analytics:** só configuração (mesmos prefixo, environment, nomes de buckets). **Zero** referência IAM de uma role à outra (Q4-A).
+**Q4-A:** identity root **não** usa `terraform_remote_state` nem data source do bootstrap. Bucket/tabela/role chegam por EnvConfig + vars GitHub.
 
-**Padrão de comunicação:** composição declarativa no root (mesmo estado Terraform). Sem chamadas runtime entre componentes.
+**Q7-A:** dois states Terraform independentes; YAML não entra no grafo Terraform.
+
+**POC v1:** Glue ↔ Analytics só por configuração compartilhada.
 
 ## Diagrama (Mermaid)
 
 ```mermaid
 flowchart TD
-    subgraph Platform["IdentityPlatform root apply"]
-        Boot["Bootstrap suporte"]
-        Glue["GlueIdentity"]
-        Analytics["AnalyticsIdentity"]
-        Contract["OutputContract"]
-        Boot -->|vars naming buckets principals| Glue
-        Boot -->|vars naming buckets principals| Analytics
-        Glue -->|role_arn| Contract
-        Analytics -->|role_arn| Contract
-    end
-    P1["P1 Engenheiro"] -->|plan apply output destroy| Platform
-    Contract -->|three outputs access null| P2proj["Projeto 2"]
-    GlueJob["Glue Job ator"] -.->|assume apos apply| Glue
-    Analyst["P2 Analista"] -.->|assume apos apply| Analytics
+  Eng["Engenheiro admin"]
+  Boot["BootstrapStack"]
+  Env["EnvConfig"]
+  CI["CiPipelines"]
+  IdPlat["IdentityPlatform"]
+  Glue["GlueIdentity"]
+  An["AnalyticsIdentity"]
+  Out["OutputContract"]
+  GH["GitHub Environment vars"]
+  Eng -->|apply_once local| Boot
+  Boot -.->|ops: OIDC role existe| CI
+  Env --> CI
+  Env --> IdPlat
+  GH --> CI
+  CI -->|run env OIDC| IdPlat
+  IdPlat --> Glue
+  IdPlat --> An
+  Glue --> Out
+  An --> Out
 ```
 
 ## Alternativa em texto
 
 ```
-P1 Engenheiro --plan/apply/output/destroy--> IdentityPlatform (rotulo do root)
+Engenheiro --apply_once--> BootstrapStack (state local, por conta)
+                                 |
+                                 | operacional (sem remote_state)
+                                 v
+CiPipelines.run(env) --OIDC + EnvConfig--> IdentityPlatform (state S3 na conta)
+                                              |
+                                              +--> GlueIdentity
+                                              +--> AnalyticsIdentity
+                                              +--> OutputContract
 
-IdentityPlatform contem:
-  - Bootstrap (suporte): vars, provider, tags
-  - GlueIdentity        (independente de Analytics)
-  - AnalyticsIdentity   (independente de Glue)
-  - OutputContract      (le role_arn das duas identidades)
-
-OutputContract --glue_role_arn, analytics_role_arn, access_role_arn=null--> Projeto 2
-
-Apos apply: Glue Job assume GlueIdentity; P2 assume AnalyticsIdentity.
-US-5 (Nao-consumidor, simulate) fica em Build and Test, fora deste grafo.
+Glue e Analytics nao se referenciam.
+Simulate.sh e invocado pelo CI; dono = Build and Test.
 ```
 
-## Fluxo de dados (resumo)
+## Fluxo operacional
 
-1. Variáveis entram no root (bootstrap).
-2. Cada identidade materializa um `role_arn` independente.
-3. O contrato agrega os ARNs e publica `access_role_arn = null`.
-4. Projeto 2 consome só o contrato.
+1. BootstrapService em cada conta.
+2. Preencher GitHub Environments (account id, ARN da deploy role) e placeholders de EnvConfig.
+3. Criar `origin/hom`.
+4. DeployService: `run(dev|hom|prod)` ou apply local.
+5. Projeto 2 consome OutputContract **nessa conta**.

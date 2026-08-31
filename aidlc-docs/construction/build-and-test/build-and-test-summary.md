@@ -1,33 +1,36 @@
 # Resumo de Build e Testes
 
+Incremento: U2 bootstrap + U3 identity CI (U1 policies inalteradas).
+
 ## Status do Build
 
-- **Ferramenta de Build**: Terraform >= 1.7.5
-- **Status do Build**: Sucesso (`terraform init`, `fmt`, `validate` nesta sessao)
-- **Artefatos de Build**: `.terraform/` local; `.terraform.lock.hcl` (aws v5.100.0)
-- **Tempo de Build**: init ~30s; validate ~10s
-- **Nao executado**: `plan`/`apply` contra conta AWS (sem tfvars reais neste ambiente)
+- **Ferramenta de Build**: Terraform >= 1.7.5 (CI 1.9.8)
+- **Status do Build**: Sucesso estático — `fmt` / `validate` em `identity/` (`init -backend=false`) e em `bootstrap/`
+- **Artefatos de Build**: `.terraform.lock.hcl` (`identity/` e `bootstrap/`, aws v5.100.0); workflows em `.github/workflows/`
+- **Tempo de Build**: init/validate ~10–30 s por root
+- **Não executado**: `plan`/`apply` contra contas AWS; pipelines GitHub reais
 
-## Resumo da Execucao de Testes
+## Resumo da Execução de Testes
 
-### Testes Unitarios (validate/fmt)
+### Testes Unitários
 
-- **Status**: Passou (`terraform validate`)
+- **Status**: Passou (`terraform validate` nos dois roots)
 - **Cobertura**: N/A
 
-### Testes de Integracao
+### Testes de Integração
 
-- **Status**: Instrucoes prontas; apply na conta **nao executado** aqui
+- **Status**: Instruções prontas (U2→U3 backend, OIDC, mesmo `backend_path` no apply)
+- **Runtime**: não executado aqui
 
 ### Testes de Desempenho
 
-- **Status**: N/A (sem SLO)
+- **Status**: N/A (sem SLO; timeout CI 20 min)
 
 ### Testes Adicionais
 
-- **Testes de Contrato**: Instrucoes prontas; outputs so apos apply
-- **Testes de Seguranca**: Script `tests/simulate-principal-policy.*`; nao executado sem apply
-- **Testes E2E**: Instrucoes apply → simulate → destroy; nao executado sem conta
+- **Contrato**: instruções (outputs + backend.hcl)
+- **Segurança**: simulate `.ps1`/`.sh`; não executado sem apply
+- **E2E**: bootstrap → migrate → apply → simulate; não executado sem conta
 
 ## Arquivos gerados
 
@@ -42,10 +45,10 @@
 
 ## Status Geral
 
-- **Build (estatico)**: Sucesso
-- **Todos os Testes (runtime AWS)**: Pendente da conta do P1
-- **Pronto para Operations**: Sim, como placeholder — implantacao e o `apply` documentado no README; fase Operations do AI-DLC permanece placeholder
+- **Build (estático)**: Sucesso
+- **Todos os Testes (runtime AWS / GitHub)**: Pendente do P1
+- **Pronto para Operations**: Sim como **placeholder** AI-DLC — implantação = README + pipelines; o estágio Operations não adiciona runbooks nesta versão das regras
 
-## Proximos Passos
+## Próximos Passos
 
-P1 executa plan/apply/simulate/destroy na conta AWS. Operations AI-DLC nao adiciona CI/CD nesta POC.
+P1: bootstrap nas 3 contas, Environments GitHub, migrate se necessário, pipelines. Operations AI-DLC permanece placeholder.

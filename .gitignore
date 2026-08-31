@@ -9,7 +9,9 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 *.tfvars
-!example.tfvars
+!bootstrap/example.tfvars
+!identity/example.tfvars
+!identity/env/*.tfvars
 *.tfvars.json
 .idea/
 .vscode/

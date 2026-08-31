@@ -1,43 +1,43 @@
-# Instrucoes de Testes de Integracao
+# Instruções de Testes de Integração
 
-Uma unidade apenas. Integracao = **IAM na conta** + **contrato de nomes com o Projeto 2** (externo).
+Interações **U2 → U3** (backend + OIDC) e **CI → identidade**.
 
-## Cenarios de Teste
+## Cenários de Teste
 
-### Cenario 1: Apply cria as duas identidades e o contrato
+### Cenário 1: Bootstrap cria backend que o identity init usa
 
-- **Descricao**: `terraform apply` materializa Glue + Analytics e os tres outputs
-- **Setup**: `terraform.tfvars` valido; credencial admin IAM
-- **Etapas**: `terraform apply -var-file=terraform.tfvars`
-- **Resultados Esperados**: apply sem erro; `glue_role_arn` e `analytics_role_arn` preenchidos; `access_role_arn` null
-- **Limpeza**: `terraform destroy -var-file=terraform.tfvars` (nao apaga buckets)
+- **Descrição**: outputs U2 (`state_bucket_name`, `lock_table_name`, região) coincidem com `identity/env/{env}.backend.hcl`
+- **Setup**: apply `bootstrap/` na conta do env; preencher `backend.hcl` se o nome S3 foi override
+- **Etapas**: em `identity/`, `terraform init -backend-config=env/{env}.backend.hcl` (admin); `plan` não deve pedir recriar o backend
+- **Resultados Esperados**: init remoto OK; lock DynamoDB `LockID`
+- **Limpeza**: não destruir U2 enquanto houver state da identidade
 
-### Cenario 2: Trust Analytics rejeita Nao-consumidor
+### Cenário 2: OIDC assume a deploy role da conta certa
 
-- **Descricao**: ARN fora de `analytics_principal_arns` nao assume a role
-- **Setup**: identidade extra na conta, nao listada
-- **Etapas**: `aws sts assume-role --role-arn <analytics_role_arn> --role-session-name test` com o Nao-consumidor
-- **Resultados Esperados**: AccessDenied
-- **Limpeza**: nenhuma
+- **Descrição**: pipeline `dev` não assume role de `prod` (RF-ME7)
+- **Setup**: três Environments; vars `AWS_ROLE_ARN_*`; trust `environment:` + `ref:`
+- **Etapas**: disparar `deploy-dev`; confirmar `aws sts get-caller-identity` na conta dev
+- **Resultados Esperados**: Account ID da conta dev; falha se apontar ARN de outra conta
+- **Limpeza**: N/A
 
-### Cenario 3: Glue assume (quando houver job no Projeto 2)
+### Cenário 3: Plan e apply usam o mesmo backend.hcl
 
-- **Descricao**: Job Glue usa `glue_role_arn`
-- **Setup**: Projeto 2 (opcional nesta POC)
-- **Etapas**: apontar o job para o output Glue
-- **Resultados Esperados**: assume permitido (servico Glue + SourceAccount)
-- **Limpeza**: a cargo do Projeto 2
+- **Descrição**: job apply hom/prod faz `init -backend-config` com o **mesmo** `inputs.backend_path` do plan
+- **Setup**: workflow `deploy-hom` / `deploy-prod`
+- **Etapas**: aprovar apply após revisar o plan no log do job `plan`
+- **Resultados Esperados**: apply do `tfplan` sem erro de state incompatível
+- **Limpeza**: artifact `tfplan` expira em 1 dia
 
 ## Configurar Ambiente
 
-Nao ha docker-compose. So AWS + Terraform.
+U2 aplicada; GitHub Environments; branch `hom` publicada se for testar hom.
 
 ## Executar
 
-Nao ha suite Maven/npm. Use apply + CLI conforme acima.
+Não há suite JUnit. Executar os cenários manualmente ou via `workflow_dispatch`.
+
+Logs: GitHub Actions e CLI Terraform.
 
 ## Limpeza
 
-```bash
-terraform destroy -var-file=terraform.tfvars
-```
+Não `terraform destroy` no CI. Destroy da identidade: local. Destroy do bootstrap: só após identidade destruída e `prevent_destroy` removido.

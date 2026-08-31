@@ -1,218 +1,230 @@
-# Requirements — Camada de Identidade (InfraRoles Mini)
+# Requirements — Incremento multi-env (dev / hom / prod + CI)
 
 ## Intent Analysis Summary
 
 | Campo | Valor |
 |-------|-------|
-| Solicitação do usuário | Inception AI-DLC a partir do PRD de InfraRoles |
-| Tipo de solicitação | Novo projeto (greenfield IaC) |
-| Estimativa de escopo | Múltiplos componentes (roles Glue e Analytics, policies, outputs) |
+| Solicitação do usuário | 3 contas AWS fixas (uma por ambiente) e uma pipeline por ambiente para aplicar esta infra |
+| Tipo de solicitação | Nova funcionalidade (CI + isolamento por conta) sobre brownfield IAM |
+| Clareza | Clara após respostas (Q1–Q13) |
+| Estimativa de escopo | Múltiplos componentes (bootstrap, backend, workflows, tfvars, gitignore) |
 | Estimativa de complexidade | Moderada |
 | Profundidade | Padrão |
-| Fonte | `prd-source.md` (PRD 1.0 POC) + respostas em `requirement-verification-questions.md` |
+| Fonte | Pedido 2026-08-30 + `requirement-verification-questions.md` + RE + POC v1 (`requirements-poc-v1.md`) |
+
+A identidade IAM (roles Glue/Analytics, policies, outputs) **permanece** como na POC v1. Este documento **substitui** os não-objetivos “multi-conta / só dev / state local / sem CI” e **emenda** RNF4 e RNF7.
 
 ---
 
 ## 1. Visão
 
-Provisionar, via Terraform, a camada de identidade e acesso (IAM Roles e Policies) de uma arquitetura Data Mesh pessoal em **uma única conta AWS**. Este projeto (Projeto 1) entrega os ARNs consumidos pela plataforma de dados (Projeto 2).
+Aplicar o **mesmo** root Terraform de identidade em **três contas AWS fixas**, uma por ambiente (`dev`, `hom`, `prod`), via **três pipelines GitHub Actions independentes**. Cada conta é dona do seu state (S3 + DynamoDB) e da sua role de deploy (OIDC). Este repo **não cria contas** Organizations.
 
 **Objetivos**
-- **O1.** Roles versionadas e reproduzíveis via IaC.
-- **O2.** Menor privilégio, escopado aos recursos da POC.
-- **O3.** ARNs como contrato de integração para o Projeto 2.
-- **O4.** 100% destruível/recriável (`apply` / `destroy` limpos).
+- **O1.** Um apply isolado por ambiente/conta, sem colidir state.
+- **O2.** Pipeline por ambiente: `fmt` + `validate` + `plan` + `apply` + `simulate-principal-policy`.
+- **O3.** Autenticação CI sem access keys (GitHub OIDC → IAM role na conta alvo).
+- **O4.** Bootstrap versionado (`bootstrap/`) por conta: backend + role OIDC.
+- **O5.** Contrato com Projeto 2 **por ambiente na mesma conta**.
 
 **Não-objetivos**
-- Multi-conta
-- Roles de ECS, EventBridge ou mainframe
-- Ambientes hom/prod (apenas `dev` nesta POC)
-- Módulo corporativo `itau-ey4-modulo-iamsr`
-- Federação SSO / IdP corporativo
-- Rotação de credenciais e políticas de senha
-- Criação de buckets, databases Glue, Lake Formation grants ou jobs ETL
-- Role de Acesso (automação) nesta iteração — apenas o output contratual
+- Criar contas AWS / Organizations / Control Tower
+- Terraform Cloud / HCP Terraform
+- Um único push aplicando os três ambientes
+- Access keys no GitHub
+- Implementar o Projeto 2 neste incremento (só o contrato de contas)
+- Destroy automatizado nas pipelines (destroy continua local/manual)
+- Security Baseline, Resiliency Baseline, PBT (opt-out)
 
 ---
 
-## 2. Personas
+## 2. Personas (operação)
 
-- **Engenheiro de dados:** aplica e mantém o Terraform; assume a role de Analytics para validar consumo.
-- **Glue Job (sistema):** assume a role de Glue para executar ETL.
-- **Analista/BI (consumidor):** assume a role de Analytics para consulta via Athena.
+- **Engenheiro:** preenche tfvars, aplica bootstrap uma vez por conta (credencial admin), faz push/dispatch das pipelines.
+- **Aprovador hom/prod:** revisa o `plan` e aprova o GitHub Environment antes do apply.
+- Personas de runtime (Glue Job, Analista) **não mudam** (POC v1).
 
 ---
 
 ## 3. Decisões fechadas (esclarecimentos)
 
-| Tema | Decisão |
-|------|---------|
-| Trust da role Analytics | Lista parametrizada de ARNs (`users` e/ou `roles`) |
-| Role de Acesso | Não criar agora; output `access_role_arn` = `null` |
-| Região | Variável `aws_region` com default `sa-east-1` |
-| Prefixo | `datamesh-poc` (parametrizado; default este valor) |
-| Buckets | Este projeto **não cria** buckets; só referencia nomes em policies |
-| Camadas | `sor`, `sot`, `spec` (fidelidade Itaú / DBs do Projeto 2) |
-| Athena results | Variável `athena_results_bucket`; bucket criado no Projeto 2 |
-| Role Glue | Somente execution role (Job/Crawler) |
-| State | Backend local; state fora do git |
-| Estrutura | Um arquivo por role no root module (`glue.tf`, `analytics.tf`) |
-| Extensões | Security Baseline: **Não**; Resiliency: **Não**; PBT: **Não** |
+| Tema | Q | Decisão |
+|------|---|---------|
+| CI | Q1-A | GitHub Actions; três workflows (um por ambiente) |
+| Auth CI | Q2-A | OIDC GitHub → IAM role de deploy **na conta do ambiente**; sem access keys |
+| State | Q3-A | S3 + lock DynamoDB **dentro da própria conta** de cada ambiente (Q3 sem letra; texto = A) |
+| Bootstrap | Q4-B | Pasta `bootstrap/` aplicada **uma vez por conta** (admin local): bucket + DynamoDB + **provedor OIDC GitHub + role de deploy** |
+| Gatilho | Q5-A | Independente. `dev` → conta dev (apply automático). `hom` → conta hom. `main` → conta prod. `workflow_dispatch` em todos. **Nunca** um evento aplica os três |
+| Hom | Revisão | Branch `hom` **existe de propósito**, não é opcional. Criar e publicar `origin/hom` **antes** do primeiro uso da pipeline hom por push. `workflow_dispatch` é extra (rodar sem commit novo), **não** substitui a branch. README deve ter o comando de criação. |
+| Aprovação | Q6-B | **dev** apply automático após plan ok; **hom** e **prod** exigem aprovação (GitHub Environments) |
+| tfvars | Q7-A | `env/dev.tfvars`, `env/hom.tfvars`, `env/prod.tfvars` **commitados** (account IDs, nomes de bucket, ARNs de principal = configuração) |
+| Account IDs agora | Q8-B | Placeholders até existirem IDs reais; workflows usam variáveis GitHub (`AWS_ACCOUNT_ID_*` / ARN da role OIDC) |
+| Projeto 2 | Q9-A | Mesmas três contas; contrato buckets/workgroup **por ambiente na mesma conta** |
+| Jobs CI | Q10-C | `fmt` + `validate` + `plan` + `apply` + simulate |
+| Var-file | Revisão | **CI:** `-var-file=env/{env}.tfvars`. **Local (Windows):** sem `-var-file`; copiar o tfvars do ambiente para `terraform.tfvars` gitignored (carregamento automático; evita o parse do PowerShell). |
+| Simulate | Revisão | **Manter os dois scripts** (já existem): `tests/simulate-principal-policy.ps1` (workstation Windows) e `tests/simulate-principal-policy.sh` (CI `ubuntu-latest`). Mesmos checks; CI chama **somente** o `.sh`. Sem wrapper único. |
+| Extensões | Q11-B, Q12-B, Q13-C | Security **Não**; Resiliency **Não**; PBT **Não** |
+
+**Resolução Q7-A vs Q8-B:** estrutura dos tfvars no git (Q7); valores de account ID podem ser placeholder até preenchimento. Workflows não hardcodam IDs; leem vars/secrets do GitHub Environment.
+
+**Emenda à POC v1 RNF4:** account IDs e ARNs IAM nos tfvars de ambiente **podem** ir para o git. Continua **proibido**: access keys, tokens, state. `.gitignore` deve **permitir** `env/*.tfvars` (hoje ignora `*.tfvars` exceto `example.tfvars`).
 
 ---
 
-## 4. Requisitos Funcionais
+## 4. Requisitos funcionais (este incremento)
 
-### RF1 — Role de Glue (execution)
+Os RF1–RF7 da POC v1 continuam válidos (roles Glue/Analytics). Acrescenta-se:
 
-O sistema deve criar uma IAM Role de Glue com:
-- Trust policy permitindo `sts:AssumeRole` apenas ao serviço `glue.amazonaws.com`
-- Nome derivado de `project_prefix` + `environment` (ex.: `datamesh-poc-dev-glue-role`)
+### RF-ME1 — Três ambientes / três contas
 
-### RF2 — Permissões da role de Glue
+O root de identidade deve ser aplicável com `environment` em `{dev, hom, prod}` (validação Terraform). Cada apply usa a conta correspondente. Roles continuam nomeadas `{project_prefix}-{environment}-…`.
 
-A role de Glue deve permitir, escopado aos recursos da POC:
-- Leitura e escrita nos buckets das camadas `sor`, `sot` e `spec` (objeto e prefixo)
-- Operações de catálogo Glue necessárias a um job/crawler em execução (não incluir create/update de jobs, crawlers ou databases)
-- `lakeformation:GetDataAccess`
-- Escrita de logs do Glue no CloudWatch Logs
+### RF-ME2 — Backend remoto por conta
 
-### RF3 — Role de Analytics
+O root de identidade deve usar backend S3 + DynamoDB **na conta do ambiente**. Key de state distinta por ambiente (ex.: `datamesh-poc/{environment}/identity.tfstate`). `terraform init` na pipeline com `-backend-config` (bucket, dynamodb_table, region, key) — sem IDs reais obrigatórios no `.tf` até existirem.
 
-O sistema deve criar uma IAM Role de Analytics com:
-- Trust policy permitindo `sts:AssumeRole` aos ARNs em `analytics_principal_arns` (lista de users e/ou roles da mesma conta)
-- Nome derivado de `project_prefix` + `environment` (ex.: `datamesh-poc-dev-analytics-role`)
+### RF-ME3 — Bootstrap uma vez por conta
 
-### RF4 — Permissões da role de Analytics (somente leitura governada)
+Deve existir um root `bootstrap/` (state **local**, gitignored) que, aplicado com credencial admin na conta alvo, cria:
 
-A role de Analytics deve permitir:
-- Leitura no catálogo Glue (Get/List; sem Create/Update/Delete)
-- `lakeformation:GetDataAccess`
-- Execução e acompanhamento de queries Athena
-- Leitura nos buckets `sor`, `sot` e `spec`
-- Leitura e escrita **somente** no bucket de resultados do Athena
+- Bucket S3 de state (versionamento; sem acesso público)
+- Tabela DynamoDB de lock (`LockID`)
+- IAM OIDC provider do GitHub (`token.actions.githubusercontent.com`)
+- IAM role de deploy com trust OIDC restrito a este repositório GitHub e ao environment/ref combinado com o ambiente
+- Permissões da role: o necessário para o root de identidade (IAM roles/policies desta POC) + leitura/escrita no bucket de state e DynamoDB daquela conta
 
-### RF5 — Contrato de outputs
+Bootstrap **não** entra no apply automático das pipelines de identidade (ovo-e-galinha: a role OIDC ainda não existe).
 
-O sistema deve expor via `terraform output`:
-- `glue_role_arn` — ARN da role criada
-- `analytics_role_arn` — ARN da role criada
-- `access_role_arn` — `null` nesta POC (contrato reservado para o Projeto 2)
+### RF-ME4 — Três workflows independentes
 
-### RF6 — Parametrização de recursos referenciados
+Arquivos (nomes ilustrativos):
 
-O sistema deve aceitar como variáveis (sem criar os recursos):
-- `sor_bucket`, `sot_bucket`, `spec_bucket`, `athena_results_bucket`
-- `project_prefix` (default `datamesh-poc`)
-- `environment` (default `dev`)
-- `aws_region` (default `sa-east-1`)
-- `analytics_principal_arns` (lista; obrigatória e não vazia no apply)
+- `.github/workflows/deploy-dev.yml` — push em `dev` e `workflow_dispatch`; environment GitHub `dev`; apply **sem** aprovação extra
+- `.github/workflows/deploy-hom.yml` — push em `hom` e `workflow_dispatch`; environment `hom`; apply **após** aprovação
+- `.github/workflows/deploy-prod.yml` — push em `main` e `workflow_dispatch`; environment `prod`; apply **após** aprovação
 
-### RF7 — Validação de menor privilégio
+A branch remota `hom` é **obrigatória** para o gatilho de push (não é implícita). No setup (README): criar e publicar `origin/hom` **antes** da primeira promoção para hom. `workflow_dispatch` permite rerun sem commit novo; **não** dispensa a existência da branch.
 
-Após o apply, deve ser possível executar `aws iam simulate-principal-policy` e confirmar:
-- acesso **permitido** aos buckets da POC nas ações previstas por role
-- acesso **negado** a buckets fora da POC
+Cada workflow autentica via `aws-actions/configure-aws-credentials` (OIDC), aponta para a role na **sua** conta, e **não** dispara os outros dois.
 
----
+### RF-ME5 — Sequência de jobs e var-file
 
-## 5. Requisitos Não Funcionais
+Em cada pipeline (CI, runner Linux), após checkout e Terraform:
 
-- **RNF1.** Terraform `>= 1.7.5`; AWS Provider `~> 5.0`.
-- **RNF2.** Nenhum recurso deprecated.
-- **RNF3.** Nenhuma policy com `Resource: "*"` sem justificativa documentada no código (comentário + este documento). Exceções previstas:
-  - `lakeformation:GetDataAccess` (API não escopável por recurso de dados)
-  - Ações Athena de query execution quando o recurso não for escopável por workgroup nesta POC
-  - CloudWatch Logs do Glue, se o ARN do log group ainda não existir; preferir prefixo `/aws-glue/*` quando o provider permitir
-- **RNF4.** Segredos, Account IDs reais e ARNs reais de produção não versionados. Variáveis e `tfvars` de exemplo usam placeholders; `*.tfvars` com valores reais fica no `.gitignore`.
-- **RNF5.** Nomes parametrizados por `project_prefix` e `environment`.
-- **RNF6.** `terraform apply` e `terraform destroy` idempotentes e limpos (sem recursos órfãos criados por este projeto).
-- **RNF7.** State local; arquivo de state e backups não commitados.
-- **RNF8.** Tags mínimas em roles/policies: `Project`, `Environment`, `ManagedBy=terraform`.
+1. `terraform fmt -check`
+2. `terraform init` (backend daquela conta)
+3. `terraform validate`
+4. `terraform plan -var-file=env/{env}.tfvars`
+5. `terraform apply` com o **mesmo** `-var-file` (automático só em **dev**; hom/prod após aprovação do environment)
+6. `tests/simulate-principal-policy.sh` (não o `.ps1`) com AWS CLI nativa; bucket SOR do tfvars daquele ambiente
+
+**Local (Windows, POC v1):** não usar `-var-file=` no PowerShell. Copiar `env/dev.tfvars` (ou hom/prod) para `terraform.tfvars` na raiz (gitignored). O Terraform carrega esse arquivo sozinho. Simulate local: `.\tests\simulate-principal-policy.ps1`.
+
+Não há `terraform.tfvars` único versionado para os três ambientes; por isso o CI **precisa** de `-var-file`. Localmente o arquivo único continua sendo o `terraform.tfvars` gitignored.
+
+`destroy` **não** é job das pipelines.
+
+
+### RF-ME6 — tfvars por ambiente
+
+Commitar `env/dev.tfvars`, `env/hom.tfvars`, `env/prod.tfvars` (placeholders aceitáveis: account/ARNs fictícios no formato válido). Ajustar `.gitignore` para versioná-los.
+
+### RF-ME7 — Isolamento
+
+Pipeline `dev` não pode `assume` da role de `hom` ou `prod` (trust OIDC + environment). State de um ambiente não é usado por outro.
 
 ---
 
-## 6. Modelo lógico de identidade
+## 5. Requisitos não funcionais
 
-### Diagrama (Mermaid)
+- **RNF-ME1.** Terraform `>= 1.7.5`; AWS provider `~> 5.0` (inalterado).
+- **RNF-ME2.** Sem access keys no repositório nem em GitHub Secrets para este fluxo (só OIDC).
+- **RNF-ME3.** Runners `ubuntu-latest`. Simulate no CI: **só** `tests/simulate-principal-policy.sh`. Workstation Windows: **só** `tests/simulate-principal-policy.ps1`. Os dois arquivos devem permanecer no repo com a **mesma** sequência de `simulate-principal-policy` (Glue GetObject in/out, Analytics GetObject, Analytics PutObject deny). Não unificar num wrapper.
+- **RNF-ME4.** State files e `bootstrap/` terraform.tfstate **não** commitados.
+- **RNF-ME5.** README deve documentar, sem ambiguidade: (1) criar e publicar a branch `hom`; (2) bootstrap nas 3 contas → GitHub Environments/vars; (3) **local:** `terraform.tfvars` copiado, sem `-var-file=`; **CI:** `-var-file=env/{env}.tfvars`; (4) simulate `.ps1` local vs `.sh` no CI.
+- **RNF-ME6.** Tags existentes nas roles de identidade; bootstrap pode taguear bucket/tabela/role de deploy com `Project`, `Environment`, `ManagedBy=terraform`.
+- **RNF-ME7.** POC v1 RNF3 (menor privilégio nas policies Glue/Analytics) inalterado.
+
+---
+
+## 6. Modelo lógico
 
 ```mermaid
 flowchart TD
-    Eng["Engenheiro de dados"]
-    TF["Terraform root"]
-    GlueRole["glue_role"]
-    AnalyticsRole["analytics_role"]
-    GlueSvc["glue.amazonaws.com"]
-    Principals["analytics_principal_arns"]
-    P2["Projeto 2"]
-    Buckets["Buckets sor sot spec e Athena results"]
-
-    Eng --> TF
-    TF --> GlueRole
-    TF --> AnalyticsRole
-    GlueSvc -->|AssumeRole| GlueRole
-    Principals -->|AssumeRole| AnalyticsRole
-    GlueRole -->|RW camadas GetDataAccess logs| Buckets
-    AnalyticsRole -->|Read camadas RW Athena results| Buckets
-    TF -->|glue_role_arn analytics_role_arn access_role_arn null| P2
+  subgraph gh["GitHub"]
+    Wdev["workflow deploy-dev"]
+    Whom["workflow deploy-hom"]
+    Wprod["workflow deploy-prod"]
+  end
+  subgraph acctdev["Conta AWS dev"]
+    Bdev["S3 plus DDB state"]
+    Rdev["OIDC deploy role"]
+    Idev["glue plus analytics roles"]
+  end
+  subgraph accthom["Conta AWS hom"]
+    Bhom["S3 plus DDB state"]
+    Rhom["OIDC deploy role"]
+    Ihom["glue plus analytics roles"]
+  end
+  subgraph acctprod["Conta AWS prod"]
+    Bprod["S3 plus DDB state"]
+    Rprod["OIDC deploy role"]
+    Iprod["glue plus analytics roles"]
+  end
+  Wdev -->|OIDC| Rdev
+  Rdev --> Idev
+  Rdev --> Bdev
+  Whom -->|OIDC plus approval| Rhom
+  Rhom --> Ihom
+  Rhom --> Bhom
+  Wprod -->|OIDC plus approval| Rprod
+  Rprod --> Iprod
+  Rprod --> Bprod
 ```
 
 ### Alternativa em texto
 
 ```
-Engenheiro
-    |
-    v
-Terraform root (glue.tf, analytics.tf, outputs)
-    |
-    +--> glue_role      <-- assume -- glue.amazonaws.com
-    |         |
-    |         +--> R/W buckets sor, sot, spec
-    |         +--> Glue catalog (execucao)
-    |         +--> lakeformation:GetDataAccess
-    |         +--> CloudWatch Logs
-    |
-    +--> analytics_role <-- assume -- lista de ARNs (users/roles)
-    |         |
-    |         +--> Read buckets sor, sot, spec
-    |         +--> Glue read-only
-    |         +--> Athena query
-    |         +--> R/W athena_results_bucket
-    |
-    +--> outputs: glue_role_arn, analytics_role_arn, access_role_arn=null
-              |
-              v
-         Projeto 2 (consumidor)
+GitHub workflow deploy-dev  --OIDC--> conta DEV  (state S3/DDB + roles IAM)
+GitHub workflow deploy-hom  --OIDC + aprovacao--> conta HOM
+GitHub workflow deploy-prod --OIDC + aprovacao--> conta PROD
+
+Antes (uma vez, admin local): bootstrap/ em cada conta
+  cria bucket, DynamoDB, OIDC provider, deploy role
 ```
 
 ---
 
 ## 7. Premissas e restrições
 
-- Conta AWS pessoal com acesso administrativo.
-- Ambiente único `dev`; região default `sa-east-1`, ajustável por variável.
-- Buckets e workgroup Athena **ainda não existem** neste repositório; policies podem referenciar ARNs de buckets futuros. O apply IAM **não depende** da existência dos buckets.
-- Nomes dos buckets neste projeto devem ser os **mesmos** usados no Projeto 2.
-- Federação SSO está fora de escopo; trust da Analytics usa ARNs IAM da mesma conta.
-- Role de Acesso fica de fora da implementação atual, sem arquivo `access.tf`.
+- As três contas **já existem** (ou serão criadas fora deste repo). IDs reais podem permanecer placeholder até o operador preencher tfvars e GitHub vars.
+- Branches remotas `dev`, `hom` e `main` existem (criar `hom` no setup se ainda não houver). Hom **não** é “só dispatch sem branch”.
+- Bootstrap exige permissão IAM admin (ou equivalente) **na workstation**, não no GitHub, na primeira vez.
+- GitHub Environments `dev`, `hom`, `prod` e required reviewers em hom/prod são configuração da UI/API do GitHub (documentar; o YAML referencia `environment:`).
+- Projeto 2 não é implementado aqui; nomes de bucket/workgroup nos tfvars devem ser os que o P2 usará **naquela conta**.
+- Check `analytics_principals_same_account` permanece: principals de cada tfvars são da **conta daquele ambiente**.
 
 ---
 
 ## 8. Dependências
 
-- **Entrada:** nenhuma (primeiro projeto da sequência).
-- **Saída:** Projeto 2 consome `glue_role_arn` e `analytics_role_arn`. `access_role_arn` permanece `null` até uma iteração futura.
+- **Entrada:** três contas AWS; repositório GitHub; permissão para criar Environments.
+- **Saída:** ARNs Glue/Analytics **por conta** para o Projeto 2 no mesmo ambiente.
+- **Ordem:** bootstrap conta N → vars GitHub environment N → pipeline N → (depois) Projeto 2 na conta N.
 
 ---
 
 ## 9. Critérios de aceite
 
-- `terraform apply` conclui sem erro.
-- `terraform output` retorna `glue_role_arn` e `analytics_role_arn` preenchidos e `access_role_arn` = `null`.
-- `aws iam simulate-principal-policy` confirma acesso permitido nos buckets da POC (ações previstas por role) e negado fora deles.
-- `terraform destroy` remove todos os recursos criados por este projeto.
-- Nenhuma policy usa `Resource: "*"` sem justificativa documentada.
-- State e `*.tfvars` reais não estão no git.
+- `bootstrap/` aplica nas três contas (local) e passa a existir backend + role OIDC.
+- Push/`workflow_dispatch` em `dev` aplica identidade na conta dev **sem** aprovação; o job chama `tests/simulate-principal-policy.sh`.
+- README instrui criar `origin/hom` **antes** do primeiro deploy hom por push.
+- Pipelines hom e prod **não** aplicam até aprovação do environment.
+- Push em um branch **não** dispara apply nas outras duas contas.
+- CI usa `-var-file=env/{env}.tfvars`; README mostra o caminho local sem `-var-file` (`terraform.tfvars`).
+- `terraform init` do root usa state remoto da conta alvo (não state local do root).
+- `env/*.tfvars` versionados; state e keys ausentes do git.
+- README descreve bootstrap + branch `hom` + var-file local vs CI + `.ps1` vs `.sh`.
 
 ---
 
@@ -220,11 +232,13 @@ Terraform root (glue.tf, analytics.tf, outputs)
 
 | Risco | Impacto | Mitigação |
 |-------|---------|-----------|
-| Permissões amplas demais | Segurança | Menor privilégio; simulação IAM; revisão no `plan` |
-| Nome de bucket divergente do Projeto 2 | Integração quebra | Variáveis explícitas compartilhadas por convenção de nome |
-| Trust incorreta impede assume | ETL/consulta não roda | Lista de ARNs testável; `simulate-principal-policy` |
-| `GetDataAccess` com Resource `*` | RNF3 | Justificativa documentada (limitação da API LF) |
-| Output `access_role_arn` null quebrar Projeto 2 | Integração | Contrato explícito: null até a role existir; Projeto 2 trata opcional |
+| Bootstrap não feito | Pipeline falha OIDC | README + ordem obrigatória |
+| Trust OIDC largo demais (`repo:*`) | Outro workflow assume a role | Restringir `sub` ao repo e ao environment |
+| tfvars placeholder no apply | Roles com ARNs fictícios | Documentar preenchimento antes do primeiro apply real |
+| Branch `hom` ainda não criada | Push hom nunca dispara; primeira vez “não funciona” | Setup obrigatório no README: criar e publicar `hom`; dispatch não substitui a branch |
+| `-var-file` no PowerShell local | `Too many command line arguments` (POC v1) | Local = `terraform.tfvars`; CI (bash) = `-var-file=env/{env}.tfvars` |
+| CI chamar o `.ps1` no Ubuntu | Job falha | Workflow chama só `.sh`; `.ps1` fica para Windows |
+| Simulate antes dos buckets existirem | Script ainda valida IAM da role vs ARNs de nome | Mesmo padrão POC v1 (nomes no tfvars) |
 
 ---
 
@@ -232,20 +246,25 @@ Terraform root (glue.tf, analytics.tf, outputs)
 
 | Extensão | Status | Justificativa |
 |----------|--------|---------------|
-| Security Baseline | N/A (desabilitada) | Opt-out Q11; menor privilégio permanece via RNF3–RNF5 e RF7 |
-| Resiliency Baseline | N/A (desabilitada) | Opt-out Q12; POC de IAM sem alvos de disponibilidade |
-| Property-Based Testing | N/A (desabilitada) | Opt-out Q13; IaC declarativo sem lógica de negócio |
+| Security Baseline | N/A (desabilitada) | Q11-B; OIDC + aprovação hom/prod permanecem como RFs |
+| Resiliency Baseline | N/A (desabilitada) | Q12-B; versionamento S3 do state é RF-ME2 |
+| Property-Based Testing | N/A (desabilitada) | Q13-C; YAML + HCL declarativo |
 
 ---
 
-## 12. Rastreabilidade PRD → requisitos
+## 12. Rastreabilidade
 
-| PRD | Requisito |
-|-----|-----------|
-| RF1, RF2 | RF1, RF2 |
-| RF3, RF4 | RF3, RF4 |
-| RF5 | RF5 (refinado: `access_role_arn` null) |
-| RNF1–RNF5 | RNF1–RNF5 |
-| Questão aberta 1 | RF3 / Q1-C |
-| Questão aberta 2 | RF5 / Q2-C |
-| Questão aberta 3 | RF6 / Q3-C, Q4-A |
+| Origem | Requisito |
+|--------|-----------|
+| Pedido 3 contas + pipeline/env | RF-ME1, RF-ME4 |
+| Q1-A | RF-ME4 |
+| Q2-A | RF-ME3, RF-ME4 |
+| Q3-A | RF-ME2 |
+| Q4-B | RF-ME3 |
+| Q5-A | RF-ME4, RF-ME7 |
+| Q6-B | RF-ME4, RF-ME5 |
+| Q7-A, Q8-B | RF-ME6 |
+| Q9-A | secao 7–8 |
+| Q10-C | RF-ME5 |
+| Revisão hom / var-file / simulate | RF-ME4, RF-ME5, RNF-ME3, RNF-ME5 |
+| POC v1 RF1–RF7 | inalterados neste incremento |

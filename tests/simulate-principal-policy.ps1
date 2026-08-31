@@ -1,4 +1,4 @@
-# Simulate IAM policies (US-5). Run from repo root after apply, with AWS CLI configured.
+# Simulate IAM policies (US-5). Run from identity/ after apply, with AWS CLI configured.
 # If simulate fails right after apply, wait ~10-20s (IAM eventual consistency) and retry.
 # Call aws via splatting — PowerShell backticks + unquoted s3:Action break the CLI.
 

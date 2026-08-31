@@ -1,0 +1,21 @@
+name: deploy-prod
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  identity:
+    uses: ./.github/workflows/deploy-identity.yml
+    with:
+      environment_name: prod
+      tfvars_path: env/prod.tfvars
+      backend_path: env/prod.backend.hcl
+      split_jobs: true
+      github_environment: prod

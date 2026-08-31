@@ -1,0 +1,21 @@
+name: deploy-hom
+
+on:
+  push:
+    branches: [hom]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  actions: read
+
+jobs:
+  identity:
+    uses: ./.github/workflows/deploy-identity.yml
+    with:
+      environment_name: hom
+      tfvars_path: env/hom.tfvars
+      backend_path: env/hom.backend.hcl
+      split_jobs: true
+      github_environment: hom
