@@ -72,6 +72,18 @@ jobs:
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
 
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -153,6 +165,18 @@ jobs:
             exit 1
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
+
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -240,6 +264,18 @@ jobs:
             exit 1
           fi
           echo "OIDC will assume ${AWS_ROLE_ARN}"
+
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
