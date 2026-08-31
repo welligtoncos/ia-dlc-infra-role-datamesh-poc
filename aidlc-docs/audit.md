@@ -853,6 +853,22 @@
 
 ---
 
+## OIDC AssumeRoleWithWebIdentity denied
+**Timestamp**: 2026-08-31T04:42:00Z
+**User Input**: "Run aws-actions/configure-aws-credentials@v6 ... Not authorized to perform sts:AssumeRoleWithWebIdentity"
+**AI Response**: "Trust na AWS ja tinha welligtoncos mas so environment:dev e ref:heads/dev exatos. Job reusable manda job_workflow_ref. Locals/iam do bootstrap alargam StringLike. Usuario precisa terraform apply no bootstrap (nao apliquei daqui)."
+**Context**: HCL bootstrap atualizado; apply local pendente.
+
+---
+
+## OIDC ainda Not authorized apos trust alargado
+**Timestamp**: 2026-08-31T04:48:00Z
+**User Input**: "Current runner version... Could not assume role with OIDC: Not authorized to perform sts:AssumeRoleWithWebIdentity (sha 6815e87)"
+**AI Response**: "Trust na AWS ja tinha job_workflow_ref e mesmo assim falhou. Adicionado decode do JWT (sub/aud) no workflow, StringLike repo:owner/repo:*, environment no caller deploy-dev. Usuario precisa terraform apply no bootstrap e re-rodar."
+**Context**: Debug + trust mais amplo. Apply bootstrap obrigatorio.
+
+---
+
 
 
 

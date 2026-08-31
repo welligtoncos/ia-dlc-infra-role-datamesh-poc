@@ -18,7 +18,7 @@ data "aws_iam_policy_document" "gha_deploy_trust" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = [local.github_sub, local.github_sub_ref]
+      values   = local.github_oidc_subs
     }
   }
 }

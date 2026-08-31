@@ -24,6 +24,20 @@ locals {
   github_oidc_branch = var.environment == "prod" ? "main" : var.environment
   github_sub_ref     = "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/${local.github_oidc_branch}"
 
+  # Reusable workflow (deploy-identity.yml): GitHub often sets sub to job_workflow_ref, or
+  # appends extra claim segments. StringLike exact (no *) does not match those tokens.
+  github_sub_job_workflow = "repo:${var.github_owner}/${var.github_repo}:job_workflow_ref:${var.github_owner}/${var.github_repo}/.github/workflows/deploy-identity.yml@*"
+
+  github_oidc_subs = [
+    local.github_sub,
+    "${local.github_sub}:*",
+    local.github_sub_ref,
+    "${local.github_sub_ref}:*",
+    local.github_sub_job_workflow,
+    "repo:${var.github_owner}/${var.github_repo}:*",
+    "job_workflow_ref:${var.github_owner}/${var.github_repo}/*",
+  ]
+
   tags = {
     Project     = var.project_prefix
     Environment = var.environment
