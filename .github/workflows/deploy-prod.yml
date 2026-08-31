@@ -19,3 +19,4 @@ jobs:
       backend_path: env/prod.backend.hcl
       split_jobs: true
       github_environment: prod
+      aws_role_arn: ${{ vars.AWS_ROLE_ARN_PROD }}
