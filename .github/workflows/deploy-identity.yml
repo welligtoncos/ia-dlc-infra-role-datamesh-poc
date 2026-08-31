@@ -25,7 +25,7 @@ on:
         type: string
         required: true
       aws_role_arn:
-        description: Optional. Caller may pass vars.AWS_ROLE_ARN_*. Empty is OK; the job with environment: also reads vars.
+        description: "Optional. Caller may pass vars.AWS_ROLE_ARN_DEV, _HOM, or _PROD. Empty is OK; the job with environment also reads vars."
         type: string
         required: false
         default: ""
