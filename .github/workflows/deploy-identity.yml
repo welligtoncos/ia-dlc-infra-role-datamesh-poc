@@ -24,6 +24,10 @@ on:
         description: GitHub Environment name (dev job and apply job)
         type: string
         required: true
+      aws_role_arn:
+        description: Deploy role ARN (caller passes vars.AWS_ROLE_ARN_DEV/_HOM/_PROD)
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -57,10 +61,21 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        env:
+          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -129,10 +144,21 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        env:
+          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -206,10 +232,21 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        env:
+          AWS_ROLE_ARN: ${{ inputs.aws_role_arn }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Em Settings → Secrets and variables → Actions → Variables (nao Secrets) crie AWS_ROLE_ARN_DEV / _HOM / _PROD com o output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ inputs.aws_role_arn }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC

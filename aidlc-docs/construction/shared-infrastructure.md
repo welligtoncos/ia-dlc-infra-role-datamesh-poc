@@ -36,7 +36,7 @@ Outputs U2: `state_bucket_name`, `lock_table_name`, `deploy_role_arn`, `oidc_pro
 | Vars por Environment | `AWS_ROLE_ARN` (output U2 `deploy_role_arn`), `AWS_REGION` |
 | State key | `{project_prefix}/{environment}/identity.tfstate` (ex. `datamesh-poc/dev/identity.tfstate`) |
 | backend.hcl | `bucket`, `dynamodb_table`, `region`, `key`, `encrypt = true` |
-| Actions | `actions/checkout@v4`, `aws-actions/configure-aws-credentials@v4`, `hashicorp/setup-terraform@v3` (TF 1.9.8) |
+| Actions | `actions/checkout@v4`, `aws-actions/configure-aws-credentials@v6` (Node 24), `hashicorp/setup-terraform@v3` (TF 1.9.8) |
 | Plan file | Artifact GitHub `tfplan`, retention 1 dia — não no S3 |
 
 ### Ordem de setup (U3)

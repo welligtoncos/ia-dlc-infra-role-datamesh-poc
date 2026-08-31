@@ -829,6 +829,14 @@
 
 ---
 
+## Fix OIDC GitHub Actions Node 24
+**Timestamp**: 2026-08-31T04:25:00Z
+**User Input**: "0s\nNode 20 is being deprecated. This workflow is running with Node 24 by default. [...]\nRun aws-actions/configure-aws-credentials@v4\nError: Credentials could not be loaded, please check your action inputs: Could not load credentials from any providers"
+**AI Response**: "configure-aws-credentials v4 no Node 24; upgrade v6. ARN passa como input do caller (vars.AWS_ROLE_ARN_*). Step falha com mensagem se variavel vazia. Push na branch dev."
+**Context**: Correcao CI. Usuario precisa ter AWS_ROLE_ARN_DEV em Variables, nao Secrets.
+
+---
+
 
 
 
