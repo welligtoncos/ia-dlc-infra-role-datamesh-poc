@@ -18,17 +18,12 @@ locals {
 
   oidc_audience = "sts.amazonaws.com"
 
-  github_oidc_branch = var.environment == "prod" ? "main" : var.environment
-
-  # Conta GitHub com IDs no claim sub (owner@id/repo@id:...). AWS exige sub ou
-  # job_workflow_ref nao aberto a todos; repository sozinho e recusado.
+  # Repos novos (jul/2026): sub = repo:owner@ownerID/repo@repoID:contexto
+  # :* cobre environment:dev, ref:heads/dev e job_workflow_ref do reusable.
   github_sub_prefix = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
 
   github_oidc_subs = [
-    "${local.github_sub_prefix}:environment:${local.github_environment}",
-    "${local.github_sub_prefix}:environment:${local.github_environment}:*",
-    "${local.github_sub_prefix}:ref:refs/heads/${local.github_oidc_branch}",
-    "${local.github_sub_prefix}:ref:refs/heads/${local.github_oidc_branch}:*",
+    "${local.github_sub_prefix}:*",
   ]
 
   tags = {

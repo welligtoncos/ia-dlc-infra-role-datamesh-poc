@@ -9,22 +9,12 @@ data "aws_iam_policy_document" "gha_deploy_trust" {
       identifiers = [aws_iam_openid_connect_provider.github.arn]
     }
 
+    # aud + sub com IDs. Nao AND-ar repository/repository_owner: a AWS exige sub
+    # restrito, e esses claims extras recusam o assume se nao casarem no STS.
     condition {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:aud"
       values   = [local.oidc_audience]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:repository"
-      values   = ["${var.github_owner}/${var.github_repo}"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:repository_owner"
-      values   = [var.github_owner]
     }
 
     condition {
@@ -48,6 +38,8 @@ data "aws_iam_policy_document" "gha_deploy_permissions" {
       "iam:GetPolicyVersion",
       "iam:ListPolicyVersions",
       "iam:ListEntitiesForPolicy",
+      "iam:SimulatePrincipalPolicy",
+      "iam:GetContextKeysForPrincipalPolicy",
     ]
     resources = [
       "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${local.name_prefix}-*",

@@ -877,6 +877,118 @@
 
 ---
 
+## Confirmacao formato sub GitHub jul/2026 + Opcao A
+**Timestamp**: 2026-08-31T05:10:00Z
+**User Input**: "Confirmado, e é uma mudança recente do GitHub — não é nada errado que você fez. Desde 15 de julho de 2026... Opção A (recomendada, mais robusta) — casar por repository + repository_owner. ... Na trust do bootstrap: [HCL aud + repository + repository_owner]"
+**AI Response**: "Opcao A sozinha ja foi recusada pela AWS (MalformedPolicyDocument). Trust atual = Opcao A + sub StringLike com owner@id/repo@id. Nao remover o sub."
+**Context**: Usuario reiterou Opcao A. AWS exige sub restrito; claims limpos ficam junto.
+
+---
+
+## Ajuste trust OIDC
+**Timestamp**: 2026-08-31T05:10:30Z
+**User Input**: "ajuste"
+**AI Response**: "Corrigido iam.tf quebrado (faltavam conditions aud e repository apos edit anterior). Trust: aud + repository + repository_owner (Opcao A) + sub com IDs (exigencia AWS)."
+**Context**: Bugfix HCL + alinhamento a Opcao A sem dropar sub.
+
+---
+
+## OIDC ainda Not authorized apos apply dev + Opcao A
+**Timestamp**: 2026-08-31T05:14:00Z
+**User Input**: "Assuming role with OIDC ... Not authorized to perform sts:AssumeRoleWithWebIdentity. ... e para dev?"
+**AI Response**: "O apply local ja era a conta AWS dev (datamesh-poc-dev-gha-deploy-role). Removidas conditions repository/repository_owner (AND extra). sub StringLike repo:owner@id/repo@id:*. Usuario precisa terraform apply de novo no bootstrap e Re-run deploy-dev. Sem commit/push."
+**Context**: Opcao A AND recusa o assume; trust volta a aud+sub com IDs e wildcard.
+
+---
+
+## OIDC ok; terraform fmt -check falhou
+**Timestamp**: 2026-08-31T05:23:00Z
+**User Input**: "[log deploy-dev] Authenticated as assumedRoleId ... terraform fmt -check ... locals.tf Error: Process completed with exit code 3. Checkout 522724a"
+**AI Response**: "OIDC assumiu datamesh-poc-dev-gha-deploy-role. Falha e so fmt em identity/locals.tf (alinhamento tags). terraform fmt; commit e push na branch dev."
+**Context**: CI passou do AssumeRole; proximo gate e fmt.
+
+---
+
+## Simulate Permission denied (exit 126)
+**Timestamp**: 2026-08-31T05:27:00Z
+**User Input**: "../tests/simulate-principal-policy.sh: Permission denied Error: Process completed with exit code 126."
+**AI Response**: "OIDC e apply ok. Script sem bit executavel (repo Windows). Workflow passa a chamar via bash. Commit e push na dev."
+**Context**: Exit 126 no ultimo step do deploy-dev.
+
+---
+
+## SimulatePrincipalPolicy AccessDenied na deploy role
+**Timestamp**: 2026-08-31T05:35:00Z
+**User Input**: "User: .../datamesh-poc-dev-gha-deploy-role/GitHubActions is not authorized to perform: iam:SimulatePrincipalPolicy on resource: .../datamesh-poc-dev-glue-role"
+**AI Response**: "Inclui iam:SimulatePrincipalPolicy e GetContextKeysForPrincipalPolicy em IamReadPrefix (roles/policies do prefixo). Usuario reaplica bootstrap na conta dev e Re-run; sem push."
+**Context**: Apply Terraform da identidade ok; falta permissao na role OIDC.
+
+---
+
+## deploy-dev passou (OIDC + apply + simulate)
+**Timestamp**: 2026-08-31T05:40:00Z
+**User Input**: "[log deploy-dev a5600d6] Authenticated ... Apply complete 0 added ... Expect ALLOW glue ... allowed ... Expect DENY ... implicitDeny ... Done. deu certo"
+**AI Response**: "Pipeline dev completa: OIDC, plan sem drift, apply 0, simulate US-5 ok. Bootstrap HCL local (trust IDs + SimulatePrincipalPolicy) ainda nao commitado."
+**Context**: Incremento CI na conta AWS 082846230365.
+
+---
+
+## Como destroy para nao consumir
+**Timestamp**: 2026-08-31T05:40:30Z
+**User Input**: "como dá destroy para nao consumir"
+**AI Response**: "Ordem: identity destroy local (backend S3); depois bootstrap com prevent_destroy/force_destroy. IAM e de graca; custo e S3+DDB. Avisar: push na dev recria identidade se o OIDC continuar."
+**Context**: Teardown POC conta dev 082846230365.
+
+---
+
+## prevent_destroy bloqueou terraform destroy do bootstrap
+**Timestamp**: 2026-08-31T05:42:00Z
+**User Input**: "[terminal] Error: Instance cannot be destroyed ... aws_dynamodb_table.lock ... aws_s3_bucket.state ... lifecycle.prevent_destroy"
+**AI Response**: "Removido prevent_destroy de s3.tf e dynamodb.tf; force_destroy=true no bucket. Usuario roda terraform destroy de novo em bootstrap/. Nao commit/push dessas travas."
+**Context**: Teardown bootstrap conta dev.
+
+---
+
+## BucketNotEmpty no destroy do tfstate
+**Timestamp**: 2026-08-31T05:43:00Z
+**User Input**: "[terminal] Error deleting S3 Bucket datamesh-poc-dev-tfstate ... BucketNotEmpty: You must delete all versions in the bucket."
+**AI Response**: "Esvaziadas 8 versoes/markers; terraform destroy concluiu (1 resource). prevent_destroy restaurado no HCL."
+**Context**: Bootstrap conta 082846230365 destruido; bucket era o ultimo recurso.
+
+---
+
+## Tutorial subir e destruir no fim do sinal
+**Timestamp**: 2026-08-31T05:45:00Z
+**User Input**: "adicione um tutoria de como trabalhar subindo e destruindo quando acaba final do sinal os trabbalhos e testes."
+**AI Response**: "README raiz: secao Rotina de trabalho (subir, destruir, BucketNotEmpty, nao disparar CI). bootstrap/README e secao 8 apontam para ela."
+**Context**: Documentacao operacional POC; sem mudanca de codigo AWS.
+
+---
+
+## PR hom/main no ritmo ligar-desligar
+**Timestamp**: 2026-08-31T05:52:00Z
+**User Input**: "desse caso que eu trabalho subindo a infra e desligando"
+**AI Response**: "Dia a dia so conta dev, sem PR. PR e promocao para outra conta. README: secao PR para hom/main neste ritmo."
+**Context**: Esclarecimento vs fluxo de promocao.
+
+---
+
+## Atualizar main amanha com mudancas da dev
+**Timestamp**: 2026-08-31T05:53:00Z
+**User Input**: "mas amanhã quero trabalhar com a main atualizada para garantir todas mudanças como fazer?"
+**AI Response**: "Commit/push na dev; PR dev-main. Merge dispara deploy-prod: cancelar se nao for prod. Dia a dia continua na branch dev. README atualizado."
+**Context**: Sync de codigo vs ligar conta AWS.
+
+---
+
+## Tres ambientes no ritmo ligar-desligar
+**Timestamp**: 2026-08-31T05:55:00Z
+**User Input**: "no caso tenho 3 ambientes"
+**AI Response**: "3 contas AWS independentes. Codigo: PRs dev-hom-main. AWS: liga so as contas do dia. Merge nao liga as tres. README tabela atualizada."
+**Context**: Clarificacao multi-env vs rotina diaria.
+
+---
+
 
 
 
