@@ -821,6 +821,15 @@
 
 ---
 
+## Smoke test pipeline dev
+**Timestamp**: 2026-08-31T04:21:00Z
+**User Input**: "quero muda algo em dev para testar a pipeline"
+**AI Response**: "Tag PipelineProbe=dev em identity/locals.tf; commit identity/env/dev.tfvars (valores reais da conta 082846230365). Push na branch dev (nao main) para disparar deploy-dev."
+**Context**: Teste operacional do CI de dev.
+
+---
+
+
 
 
 
