@@ -132,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
-          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
+          bash ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
 
   plan:
     if: ${{ inputs.split_jobs }}
@@ -322,4 +322,4 @@ jobs:
         run: |
           set -euo pipefail
           SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
-          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
+          bash ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
