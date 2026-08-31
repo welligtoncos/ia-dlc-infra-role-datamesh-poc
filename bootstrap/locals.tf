@@ -18,11 +18,13 @@ locals {
 
   oidc_audience = "sts.amazonaws.com"
 
-  github_sub = "repo:${var.github_owner}/${var.github_repo}:environment:${local.github_environment}"
+  # Repos novos (jul/2026): sub = repo:owner@ownerID/repo@repoID:contexto
+  # :* cobre environment:dev, ref:heads/dev e job_workflow_ref do reusable.
+  github_sub_prefix = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
 
-  # Job plan (hom/prod) has no GitHub Environment; OIDC sub is ref of the caller branch.
-  github_oidc_branch = var.environment == "prod" ? "main" : var.environment
-  github_sub_ref     = "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/${local.github_oidc_branch}"
+  github_oidc_subs = [
+    "${local.github_sub_prefix}:*",
+  ]
 
   tags = {
     Project     = var.project_prefix

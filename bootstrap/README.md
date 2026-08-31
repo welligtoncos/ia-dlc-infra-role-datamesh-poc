@@ -17,7 +17,7 @@ Pipelines GitHub Actions **não** estão neste diretório (unidade U3).
 
 Outputs: `state_bucket_name`, `lock_table_name`, `deploy_role_arn`, `oidc_provider_arn`, `aws_region`. Guarde o ARN da role para o GitHub Environment (U3).
 
-Trust da deploy role: `aud` = `sts.amazonaws.com`; `sub` StringLike `repo:{owner}/{repo}:environment:{env}` **e** `repo:{owner}/{repo}:ref:refs/heads/{branch}` (`dev`/`hom`/`main` para prod). O segundo claim cobre o job `plan` de hom/prod (sem GitHub Environment). A pipeline de `dev` não assume a role de `prod`.
+Trust da deploy role: `aud` = `sts.amazonaws.com` e `sub` StringLike `repo:{owner}@{owner_id}/{repo}@{repo_id}:*` (formato GitHub com IDs; cobre `environment`, `ref` e `job_workflow_ref`). Preencha `github_owner_id` e `github_repo_id`. Isolamento entre contas AWS: uma role por conta.
 
 ## Requisitos
 
@@ -34,7 +34,7 @@ Copie `example.tfvars` para `terraform.tfvars` **dentro de** `bootstrap/`. Não 
 ```powershell
 Set-Location bootstrap
 Copy-Item example.tfvars terraform.tfvars
-# edite github_owner, github_repo e environment (dev | hom | prod)
+# edite github_owner, github_repo, github_owner_id, github_repo_id e environment
 
 terraform init
 terraform fmt
@@ -70,15 +70,12 @@ Se o `apply` retornar `AccessDenied` na `aws_s3_bucket_policy`: remova o resourc
 
 ## Destroy
 
-Bucket e tabela têm `prevent_destroy` e `force_destroy = false`. Terraform recusa `destroy` até você remover o `lifecycle` **de propósito**.
+Bucket e tabela têm `prevent_destroy` e `force_destroy = false`. O tutorial completo (subir no início do dia, destruir no fim do sinal, `BucketNotEmpty`) está no README da raiz, seção **Rotina de trabalho**.
 
-Ordem:
+Ordem: identidade **antes**; depois tire o `lifecycle` e destrua este root; se o S3 recusar, apague **todas as versões** do bucket e rode `terraform destroy` de novo. Recoloque `prevent_destroy` no HCL (não commit com a trava desligada).
 
-1. Destruir a identidade (U1/U3) **antes** — o state remoto vive neste bucket.
-2. Só então destruir o bootstrap (depois de tirar `prevent_destroy`).
-3. Não destruir o bootstrap enquanto existir state da identidade neste S3.
+Não há destroy nas pipelines (U3).
 
-Não há destroy nas pipelines (U3); destroy do bootstrap continua local/manual.
 
 ## Fora deste diretório
 

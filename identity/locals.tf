@@ -26,8 +26,9 @@ locals {
   athena_workgroup_arn = "arn:aws:athena:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:workgroup/${var.athena_workgroup}"
 
   tags = {
-    Project     = var.project_prefix
-    Environment = var.environment
-    ManagedBy   = "terraform"
+    Project       = var.project_prefix
+    Environment   = var.environment
+    ManagedBy     = "terraform"
+    PipelineProbe = "dev-2"
   }
 }

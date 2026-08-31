@@ -24,6 +24,11 @@ on:
         description: GitHub Environment name (dev job and apply job)
         type: string
         required: true
+      aws_role_arn:
+        description: "Optional. Caller may pass vars.AWS_ROLE_ARN_DEV, _HOM, or _PROD. Empty is OK; the job with environment also reads vars."
+        type: string
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -45,6 +50,7 @@ jobs:
         working-directory: identity
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -57,10 +63,31 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -105,7 +132,7 @@ jobs:
         run: |
           set -euo pipefail
           SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
-          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
+          bash ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
 
   plan:
     if: ${{ inputs.split_jobs }}
@@ -117,6 +144,7 @@ jobs:
         working-directory: identity
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -129,10 +157,31 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -194,6 +243,7 @@ jobs:
       actions: read
     env:
       TF_IN_AUTOMATION: "true"
+      AWS_ROLE_ARN: ${{ inputs.aws_role_arn || (inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM) || (inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD) || vars.AWS_ROLE_ARN_DEV }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -206,10 +256,31 @@ jobs:
           terraform_version: "1.9.8"
           terraform_wrapper: false
 
+      - name: Require AWS role ARN
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ROLE_ARN}" ]; then
+            echo "::error::AWS_ROLE_ARN vazio. Crie AWS_ROLE_ARN_DEV (este job e dev) em Settings → Environments → dev → Environment variables, OU em Settings → Secrets and variables → Actions → Variables (repositorio). Nao use Secrets. Valor = output deploy_role_arn do bootstrap."
+            exit 1
+          fi
+          echo "OIDC will assume ${AWS_ROLE_ARN}"
+
+      - name: Debug OIDC sub
+        run: |
+          set -euo pipefail
+          TOKEN=$(curl -sSf -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=sts.amazonaws.com" | jq -r '.value')
+          payload=$(printf '%s' "$TOKEN" | cut -d. -f2)
+          case $(( ${#payload} % 4 )) in
+            2) payload="${payload}==" ;;
+            3) payload="${payload}=" ;;
+          esac
+          printf '%s' "$payload" | tr '_-' '/+' | base64 -d 2>/dev/null | jq '{sub, aud, ref, environment, job_workflow_ref}'
+
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
-          role-to-assume: ${{ inputs.environment_name == 'prod' && vars.AWS_ROLE_ARN_PROD || inputs.environment_name == 'hom' && vars.AWS_ROLE_ARN_HOM || vars.AWS_ROLE_ARN_DEV }}
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION || 'sa-east-1' }}
 
       - name: Retry STS after OIDC
@@ -251,4 +322,4 @@ jobs:
         run: |
           set -euo pipefail
           SOR_BUCKET="$(awk -F= '/^[[:space:]]*sor_bucket[[:space:]]*=/{gsub(/[" ]/, "", $2); print $2; exit}' "${{ inputs.tfvars_path }}")"
-          ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
+          bash ../tests/simulate-principal-policy.sh "${SOR_BUCKET}"
