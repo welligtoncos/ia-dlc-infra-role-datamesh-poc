@@ -17,7 +17,7 @@ Pipelines GitHub Actions **não** estão neste diretório (unidade U3).
 
 Outputs: `state_bucket_name`, `lock_table_name`, `deploy_role_arn`, `oidc_provider_arn`, `aws_region`. Guarde o ARN da role para o GitHub Environment (U3).
 
-Trust da deploy role: `aud` = `sts.amazonaws.com`; `sub` StringLike `repo:{owner}/{repo}:environment:{env}` **e** `repo:{owner}/{repo}:ref:refs/heads/{branch}` (`dev`/`hom`/`main` para prod). O segundo claim cobre o job `plan` de hom/prod (sem GitHub Environment). A pipeline de `dev` não assume a role de `prod`.
+Trust da deploy role: `aud` = `sts.amazonaws.com`; `repository` + `repository_owner`; e `sub` StringLike no formato **com IDs** (`repo:{owner}@{owner_id}/{repo}@{repo_id}:environment:{env}` e `:ref:refs/heads/{branch}`). A AWS recusa trust GitHub sem `sub`/`job_workflow_ref` restrito. Preencha `github_owner_id` e `github_repo_id` (saem do token OIDC). Isolamento entre contas AWS: uma role por conta.
 
 ## Requisitos
 

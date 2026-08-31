@@ -16,6 +16,18 @@ data "aws_iam_policy_document" "gha_deploy_trust" {
     }
 
     condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository"
+      values   = ["${var.github_owner}/${var.github_repo}"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:repository_owner"
+      values   = [var.github_owner]
+    }
+
+    condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values   = local.github_oidc_subs

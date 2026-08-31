@@ -205,7 +205,7 @@ terraform init -backend-config=env/dev.backend.hcl -migrate-state
 
 (troque `dev` pelo ambiente). O CI **não** faz migrate. Depois o init remoto usa S3.
 
-Se o `plan` de hom/prod falhar no OIDC (`Not authorized to perform sts:AssumeRoleWithWebIdentity`), o trust da U2 precisa aceitar o claim `ref:refs/heads/hom` (e `main` em prod). O `bootstrap/` desta geração já inclui `environment:` **e** `ref:` da branch correspondente.
+Se o OIDC falhar (`Not authorized` / `MalformedPolicyDocument`), a trust precisa de `sub` no formato **com IDs** (`repo:owner@id/repo@id:environment:env`) mais `repository` / `repository_owner`. Preencha `github_owner_id` e `github_repo_id` no bootstrap.
 
 ## Ir ao ar (local, Windows)
 

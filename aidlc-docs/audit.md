@@ -869,6 +869,15 @@
 
 ---
 
+## Trust OIDC repository + repository_owner
+**Timestamp**: 2026-08-31T05:03:00Z
+**User Input**: "Achamos. Olha o sub real... welligtoncos@58040980/...@1349046965:environment:dev ... casar pelos claims repository + repository_owner"
+**AI Response**: "Trust do bootstrap deixou de casar sub. StringEquals aud, repository (owner/repo) e repository_owner. Isolamento entre contas AWS permanece; qualquer workflow deste repo assume a role daquela conta (POC)."
+**Context**: Usuario diagnosticou formato novo do sub com IDs. Apply local do bootstrap pendente.
+
+---
+
+
 
 
 

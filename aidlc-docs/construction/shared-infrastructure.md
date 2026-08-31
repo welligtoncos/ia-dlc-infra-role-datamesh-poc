@@ -22,7 +22,7 @@ Criado por `bootstrap/` **uma vez por conta**. State do bootstrap é local; stat
 | Bucket S3 | `{project_prefix}-{environment}-tfstate` (override se nome global ocupado) | State U3 |
 | Tabela DynamoDB | `{project_prefix}-{environment}-tf-lock` | Lock (`LockID`) |
 | OIDC GitHub | `token.actions.githubusercontent.com` na conta | Trust da deploy role |
-| Deploy role | `{project_prefix}-{environment}-gha-deploy-role` | GitHub Actions assume via OIDC (`environment:` = mesmo env) |
+| Deploy role | `{project_prefix}-{environment}-gha-deploy-role` | GitHub Actions assume via OIDC (`repository` + `repository_owner`; uma role por conta AWS) |
 
 Outputs U2: `state_bucket_name`, `lock_table_name`, `deploy_role_arn`, `oidc_provider_arn`, `aws_region`. U3 preenche `identity/env/{env}.backend.hcl` e vars do GitHub Environment.
 

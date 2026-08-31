@@ -31,6 +31,16 @@ variable "github_repo" {
   description = "Nome do repositorio GitHub no claim OIDC sub."
 }
 
+variable "github_owner_id" {
+  type        = string
+  description = "ID numerico do owner no sub OIDC (ex. welligtoncos@58040980). Settings → Actions ou o claim sub do token."
+}
+
+variable "github_repo_id" {
+  type        = string
+  description = "ID numerico do repositorio no sub OIDC (ex. repo@1349046965)."
+}
+
 variable "github_environment" {
   type        = string
   nullable    = true

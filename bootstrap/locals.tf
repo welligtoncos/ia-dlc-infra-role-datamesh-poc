@@ -18,24 +18,17 @@ locals {
 
   oidc_audience = "sts.amazonaws.com"
 
-  github_sub = "repo:${var.github_owner}/${var.github_repo}:environment:${local.github_environment}"
-
-  # Job plan (hom/prod) has no GitHub Environment; OIDC sub is ref of the caller branch.
   github_oidc_branch = var.environment == "prod" ? "main" : var.environment
-  github_sub_ref     = "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/${local.github_oidc_branch}"
 
-  # Reusable workflow (deploy-identity.yml): GitHub often sets sub to job_workflow_ref, or
-  # appends extra claim segments. StringLike exact (no *) does not match those tokens.
-  github_sub_job_workflow = "repo:${var.github_owner}/${var.github_repo}:job_workflow_ref:${var.github_owner}/${var.github_repo}/.github/workflows/deploy-identity.yml@*"
+  # Conta GitHub com IDs no claim sub (owner@id/repo@id:...). AWS exige sub ou
+  # job_workflow_ref nao aberto a todos; repository sozinho e recusado.
+  github_sub_prefix = "repo:${var.github_owner}@${var.github_owner_id}/${var.github_repo}@${var.github_repo_id}"
 
   github_oidc_subs = [
-    local.github_sub,
-    "${local.github_sub}:*",
-    local.github_sub_ref,
-    "${local.github_sub_ref}:*",
-    local.github_sub_job_workflow,
-    "repo:${var.github_owner}/${var.github_repo}:*",
-    "job_workflow_ref:${var.github_owner}/${var.github_repo}/*",
+    "${local.github_sub_prefix}:environment:${local.github_environment}",
+    "${local.github_sub_prefix}:environment:${local.github_environment}:*",
+    "${local.github_sub_prefix}:ref:refs/heads/${local.github_oidc_branch}",
+    "${local.github_sub_prefix}:ref:refs/heads/${local.github_oidc_branch}:*",
   ]
 
   tags = {
