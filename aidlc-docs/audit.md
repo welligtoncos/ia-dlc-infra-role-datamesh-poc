@@ -845,6 +845,14 @@
 
 ---
 
+## Smoke push PipelineProbe dev-2
+**Timestamp**: 2026-08-31T04:37:00Z
+**User Input**: "faça uma mudança simples para testar"
+**AI Response**: "Tag PipelineProbe=dev-2 em identity/locals.tf; commit e push na branch dev para disparar deploy-dev."
+**Context**: Teste CI apos usuario ajustar Variables GitHub.
+
+---
+
 
 
 

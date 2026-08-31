@@ -29,6 +29,6 @@ locals {
     Project        = var.project_prefix
     Environment    = var.environment
     ManagedBy      = "terraform"
-    PipelineProbe  = "dev"
+    PipelineProbe  = "dev-2"
   }
 }
